@@ -1,7 +1,17 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "edu-track",
+  "main": ".open-next/worker.js",
   "compatibility_date": "2026-07-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": ".vercel/output/static"
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "edu-track"
+    }
+  ]
 }
