@@ -10,13 +10,17 @@ interface StreakBadgeProps {
 export function StreakBadge({ streak }: StreakBadgeProps) {
   return (
     <motion.div
-      className="flex items-center gap-2 rounded-full border border-[var(--accent-pink)]/30 bg-[var(--accent-pink)]/10 px-4 py-2"
-      whileHover={{ scale: 1.05 }}
+      className="flex items-center gap-2 rounded-2xl border border-city-orange/30 bg-city-navy-light px-4 py-2 shadow-[0_4px_0_0_rgba(0,0,0,0.2)] transition-transform active:scale-95"
+      whileHover={{ scale: 1.02 }}
     >
-      <Flame className="h-5 w-5 text-[var(--accent-pink)]" />
+      <Flame className="h-5 w-5 text-city-orange drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)]" />
       <div>
-        <p className="text-xs text-white/50">Streak</p>
-        <p className="text-lg font-bold leading-none">{streak}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-city-muted">
+          Streak
+        </p>
+        <p className="bg-linear-to-br from-city-orange to-city-magenta bg-clip-text text-2xl font-extrabold leading-none text-transparent">
+          {streak}
+        </p>
       </div>
     </motion.div>
   );

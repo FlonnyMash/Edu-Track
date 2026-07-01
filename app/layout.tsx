@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
+import { DevTools } from "@/components/DevTools";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -23,6 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${outfit.variable} font-sans antialiased`}>
         {children}
+        <DevTools />
       </body>
     </html>
   );

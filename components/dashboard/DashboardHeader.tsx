@@ -8,7 +8,7 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ streak, totalXp }: DashboardHeaderProps) {
   return (
-    <div className="mb-6 flex items-center gap-4">
+    <div className="flex items-stretch gap-3">
       <StreakBadge streak={streak} />
       <XpBar totalXp={totalXp} />
     </div>

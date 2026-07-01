@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Settings } from "lucide-react";
+import { BarChart3, LayoutDashboard, Settings } from "lucide-react";
 
 export default function AppLayout({
   children,
@@ -17,6 +17,13 @@ export default function AppLayout({
           >
             <LayoutDashboard className="h-5 w-5" />
             Home
+          </Link>
+          <Link
+            href="/analytics"
+            className="flex flex-col items-center gap-1 text-xs text-white/60 hover:text-[var(--accent-teal)]"
+          >
+            <BarChart3 className="h-5 w-5" />
+            Analytics
           </Link>
           <Link
             href="/settings"

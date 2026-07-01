@@ -198,6 +198,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      study_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          duration_seconds: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          duration_seconds: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          duration_seconds?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -210,3 +231,4 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type LearningTrack = Database["public"]["Tables"]["learning_tracks"]["Row"];
 export type DailyTask = Database["public"]["Tables"]["daily_tasks"]["Row"];
 export type GamificationStats = Database["public"]["Tables"]["gamification_stats"]["Row"];
+export type StudySession = Database["public"]["Tables"]["study_sessions"]["Row"];

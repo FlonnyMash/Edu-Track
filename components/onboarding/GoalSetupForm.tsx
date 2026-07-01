@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { detectTimezone } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { ensureProfileSession } from "@/lib/profiles/ensure-profile-client";
 
 type Difficulty = "gentle" | "balanced" | "ambitious";
 
@@ -39,6 +40,8 @@ export function GoalSetupForm() {
       setLoading(false);
       return;
     }
+
+    await ensureProfileSession();
 
     const { error: trackError } = await supabase.from("learning_tracks").upsert(
       {

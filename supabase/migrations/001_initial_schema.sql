@@ -124,3 +124,10 @@ create policy "completions_all_own" on public.task_completions for all using (us
 create policy "stats_select_own" on public.gamification_stats for select using (user_id = auth.uid());
 create policy "stats_update_own" on public.gamification_stats for update using (user_id = auth.uid());
 create policy "logs_all_own" on public.activity_logs for all using (user_id = auth.uid());
+
+-- PostgREST / Supabase API role access
+grant usage on schema public to postgres, anon, authenticated, service_role;
+grant all on all tables in schema public to postgres, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant select on all tables in schema public to anon;
+grant usage, select on all sequences in schema public to postgres, anon, authenticated, service_role;

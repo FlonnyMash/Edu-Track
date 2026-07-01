@@ -1,53 +1,62 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { completeTaskAction } from "@/app/actions/complete-task";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DailyTaskCard } from "@/components/dashboard/DailyTaskCard";
+import { DailyTaskCardSkeleton } from "@/components/dashboard/DailyTaskCardSkeleton";
 import { CompletionSheet } from "@/components/dashboard/CompletionSheet";
+import { Timer } from "@/components/Timer";
 import { CompanionSprite } from "@/components/gamification/CompanionSprite";
 import { ProgressMap } from "@/components/gamification/ProgressMap";
 import { Card } from "@/components/ui/card";
+import { getActiveMapNode } from "@/lib/gamification/map";
 import type { DailyTask, GamificationStats } from "@/types/database";
 
 export function DashboardClient() {
+  const router = useRouter();
   const [task, setTask] = useState<DailyTask | null>(null);
   const [stats, setStats] = useState<GamificationStats | null>(null);
   const [trackTitle, setTrackTitle] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [taskLoading, setTaskLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completionOpen, setCompletionOpen] = useState(false);
   const [highlightNode, setHighlightNode] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     setError(null);
+    setTaskLoading(true);
+    setStatsLoading(true);
+
+    const taskPromise = fetch("/api/tasks/today")
+      .then(async (taskRes) => {
+        if (!taskRes.ok) {
+          const data = await taskRes.json();
+          throw new Error(data.error || "Failed to load task");
+        }
+        const taskData = await taskRes.json();
+        setTask(taskData.task);
+      })
+      .finally(() => setTaskLoading(false));
+
+    const statsPromise = fetch("/api/gamification/stats")
+      .then(async (statsRes) => {
+        if (!statsRes.ok) {
+          const data = await statsRes.json();
+          throw new Error(data.error || "Failed to load stats");
+        }
+        const statsData = await statsRes.json();
+        setStats(statsData.stats);
+        setTrackTitle(statsData.trackTitle);
+      })
+      .finally(() => setStatsLoading(false));
 
     try {
-      const [taskRes, statsRes] = await Promise.all([
-        fetch("/api/tasks/today"),
-        fetch("/api/gamification/stats"),
-      ]);
-
-      if (!taskRes.ok) {
-        const data = await taskRes.json();
-        throw new Error(data.error || "Failed to load task");
-      }
-
-      if (!statsRes.ok) {
-        const data = await statsRes.json();
-        throw new Error(data.error || "Failed to load stats");
-      }
-
-      const taskData = await taskRes.json();
-      const statsData = await statsRes.json();
-
-      setTask(taskData.task);
-      setStats(statsData.stats);
-      setTrackTitle(statsData.trackTitle);
+      await Promise.all([taskPromise, statsPromise]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -55,90 +64,109 @@ export function DashboardClient() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    function handleRefresh() {
+      fetchData();
+    }
+
+    window.addEventListener("edu-track:refresh", handleRefresh);
+    return () => window.removeEventListener("edu-track:refresh", handleRefresh);
+  }, [fetchData]);
+
   async function handleComplete(reflectionNotes: string) {
     if (!task) return;
 
-    const res = await fetch("/api/tasks/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskId: task.id,
-        reflectionNotes: reflectionNotes || undefined,
-      }),
-    });
+    const data = await completeTaskAction(
+      task.id,
+      reflectionNotes || undefined
+    );
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to complete task");
-    }
-
-    const data = await res.json();
     setTask(data.task);
     setStats(data.stats);
-    setHighlightNode(data.stats.map_node_index);
+    const activeNode = getActiveMapNode(
+      data.task.day_number,
+      data.task.status === "completed"
+    );
+    setHighlightNode(activeNode);
     setTimeout(() => setHighlightNode(null), 2000);
+    router.refresh();
   }
 
-  if (loading) {
+  const initialLoading = taskLoading && statsLoading;
+
+  if (initialLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-12 animate-pulse rounded-xl bg-white/10" />
-        <div className="h-40 animate-pulse rounded-2xl bg-white/10" />
-        <div className="h-48 animate-pulse rounded-2xl bg-white/10" />
-        <div className="h-24 animate-pulse rounded-2xl bg-white/10" />
+      <div className="mx-auto flex w-full max-w-md flex-col gap-8 px-1">
+        <div className="h-8 w-40 animate-pulse rounded-lg border border-pink-500/10 bg-city-navy-light/60" />
+        <div className="h-14 animate-pulse rounded-2xl border border-pink-500/10 bg-city-navy-light/60" />
+        <div className="h-48 animate-pulse rounded-2xl border border-pink-500/10 bg-city-navy-light/60" />
+        <DailyTaskCardSkeleton />
+        <div className="h-24 animate-pulse rounded-2xl border border-teal-500/20 bg-city-navy-light/60" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <Card className="p-6 text-center">
-        <p className="text-red-400">{error}</p>
-        <button
-          onClick={fetchData}
-          className="mt-4 text-sm text-[var(--accent-teal)] hover:underline"
-        >
-          Try again
-        </button>
-      </Card>
+      <div className="mx-auto w-full max-w-md px-1">
+        <Card className="border-pink-500/20 bg-city-navy-light p-6 text-center">
+          <p className="text-red-400">{error}</p>
+          <button
+            onClick={fetchData}
+            className="mt-4 text-sm text-city-teal transition-transform active:scale-95 hover:underline"
+          >
+            Try again
+          </button>
+        </Card>
+      </div>
     );
   }
 
-  if (!task || !stats) {
+  if (!stats) {
     return (
-      <Card className="p-6 text-center">
-        <p className="text-white/60">No data available</p>
-      </Card>
+      <div className="mx-auto w-full max-w-md px-1">
+        <Card className="border-pink-500/20 bg-city-navy-light p-6 text-center">
+          <p className="text-city-muted">No data available</p>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Dashboard</h1>
+    <div className="mx-auto flex w-full max-w-md flex-col gap-8 px-1">
+      <h1 className="bg-linear-to-r from-city-orange via-city-magenta to-city-teal bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
+        Dashboard
+      </h1>
 
       <DashboardHeader
         streak={stats.current_streak}
         totalXp={stats.total_xp}
       />
 
-      <Card className="mb-6 flex justify-center py-6 city-pop-border">
+      <Card className="relative flex justify-center overflow-hidden border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
+        <div className="collectible-glow pointer-events-none absolute inset-0" />
         <CompanionSprite
-          stage={stats.companion_stage}
+          currentDay={task?.day_number ?? 1}
           trackTitle={trackTitle ?? undefined}
-          dayNumber={task.day_number}
+          dayNumber={task?.day_number ?? 1}
         />
       </Card>
 
-      <div className="mb-6">
+      {taskLoading || !task ? (
+        <DailyTaskCardSkeleton />
+      ) : (
         <DailyTaskCard
           task={task}
           onComplete={() => setCompletionOpen(true)}
         />
-      </div>
+      )}
 
-      <Card className="p-4">
+      <Timer />
+
+      <Card className="relative overflow-hidden border-teal-500/20 bg-city-navy-light/80 p-5 shadow-[0_6px_0_0_rgba(0,0,0,0.2)]">
         <ProgressMap
-          currentNode={stats.map_node_index}
+          currentDay={task?.day_number ?? 1}
+          isTodayCompleted={task?.status === "completed"}
           highlightNode={highlightNode}
         />
       </Card>

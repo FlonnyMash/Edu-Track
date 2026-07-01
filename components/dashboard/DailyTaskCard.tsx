@@ -20,24 +20,28 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <Card className="city-pop-border">
+      <Card className="border-magenta-500/25 bg-city-navy-light shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
         <CardHeader>
-          <p className="pixel-label text-[var(--accent-pink)]">Today&apos;s Task</p>
-          <CardTitle className="text-xl">{task.title}</CardTitle>
+          <p className="text-xs font-bold uppercase tracking-widest text-city-magenta">
+            Today&apos;s Task
+          </p>
+          <CardTitle className="text-2xl font-extrabold leading-tight text-white">
+            {task.title}
+          </CardTitle>
           {task.estimated_minutes && (
-            <div className="flex items-center gap-1.5 text-sm text-white/50">
+            <div className="flex items-center gap-1.5 text-sm text-city-muted">
               <Clock className="h-4 w-4" />
               ~{task.estimated_minutes} min
             </div>
           )}
         </CardHeader>
         <CardContent>
-          <p className="mb-6 whitespace-pre-wrap text-sm leading-relaxed text-white/80">
+          <p className="mb-6 whitespace-pre-wrap text-base leading-relaxed text-white/85">
             {task.instructions}
           </p>
           {isCompleted ? (
             <motion.div
-              className="flex items-center justify-center gap-2 rounded-xl bg-[var(--accent-teal)]/20 py-4 text-[var(--accent-teal)]"
+              className="flex items-center justify-center gap-2 rounded-xl border border-city-teal/30 bg-city-teal/15 py-4 text-city-teal shadow-[0_4px_0_0_rgba(0,0,0,0.2)]"
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
             >
@@ -45,7 +49,11 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
               <span className="font-medium">Completed today!</span>
             </motion.div>
           ) : (
-            <Button onClick={onComplete} className="w-full" size="lg">
+            <Button
+              onClick={onComplete}
+              className="w-full bg-city-magenta shadow-[0_6px_0_0_#B8326A] transition-all hover:brightness-110 active:translate-y-1 active:scale-95 active:shadow-[0_2px_0_0_#B8326A]"
+              size="lg"
+            >
               Mark Complete
             </Button>
           )}

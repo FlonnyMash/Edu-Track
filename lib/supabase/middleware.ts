@@ -38,6 +38,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/signup");
   const isAppRoute =
     pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/analytics") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/settings");
   const isApiRoute = pathname.startsWith("/api");
@@ -63,8 +64,7 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     if (
-      profile &&
-      !profile.onboarding_completed &&
+      (!profile || !profile.onboarding_completed) &&
       pathname !== "/onboarding"
     ) {
       const url = request.nextUrl.clone();

@@ -19,14 +19,18 @@ export function CompletionSheet({ open, onClose, onSubmit }: CompletionSheetProp
 
   async function handleSubmit() {
     setLoading(true);
-    await onSubmit(notes);
-    setShowCelebration(true);
-    setTimeout(() => {
-      setShowCelebration(false);
-      setNotes("");
+    try {
+      await onSubmit(notes);
+      setShowCelebration(true);
+      setTimeout(() => {
+        setShowCelebration(false);
+        setNotes("");
+        setLoading(false);
+        onClose();
+      }, 1500);
+    } catch {
       setLoading(false);
-      onClose();
-    }, 1500);
+    }
   }
 
   return (

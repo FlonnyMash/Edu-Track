@@ -5,7 +5,7 @@ AI-powered daily learning planner with gamification. Deployed on **Cloudflare Wo
 ## Setup
 
 1. Create a [Supabase](https://supabase.com) project
-2. Run the migration in `supabase/migrations/001_initial_schema.sql` via the SQL Editor
+2. Run all SQL migrations in `supabase/migrations/` via the SQL Editor (in order: `001`, `002`, `003`)
 3. Configure Auth redirect URLs:
    - Local: `http://localhost:3000/auth/callback`
    - Production: `https://<your-workers-domain>/auth/callback`

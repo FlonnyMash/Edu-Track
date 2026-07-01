@@ -1,7 +1,16 @@
 export const MAP_NODE_COUNT = 30;
 
 export function getMapNodeIndex(completedDaysCount: number): number {
-  return Math.min(completedDaysCount, MAP_NODE_COUNT);
+  return Math.min(completedDaysCount, MAP_NODE_COUNT - 1);
+}
+
+/** Active metro stop index (0-based) from the user's current learning day. */
+export function getActiveMapNode(
+  currentDay: number,
+  isTodayCompleted: boolean
+): number {
+  const activeNode = isTodayCompleted ? currentDay : currentDay - 1;
+  return Math.min(Math.max(activeNode, 0), MAP_NODE_COUNT - 1);
 }
 
 export const MAP_NODE_LABELS = [

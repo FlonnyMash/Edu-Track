@@ -16,6 +16,10 @@ export interface GenerationContext {
   totalXp: number;
 }
 
+export function buildMvpCoachPrompt(topic: string, currentDay: number): string {
+  return `You are an expert learning coach. The user is learning ${topic}. They are on Day ${currentDay} of their journey. Generate a specific, actionable, and highly focused 20-minute daily task. The difficulty must slowly and logically progress based on the day. Keep it concise. Return a JSON object strictly matching this structure: { "title": "Task Title", "description": "Task details and actionable steps" }.`;
+}
+
 export function buildSystemPrompt(): string {
   return `You are an intelligent daily learning curriculum planner for Edu Track.
 Your role is to plan ONE actionable offline learning task per day — never quizzes or knowledge tests.

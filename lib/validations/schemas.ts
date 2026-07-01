@@ -23,6 +23,16 @@ export const completeTaskSchema = z.object({
   reflectionNotes: z.string().max(1000).optional(),
 });
 
+export const saveStudySessionSchema = z.object({
+  userId: z.string().uuid(),
+  durationSeconds: z.number().int().min(1).max(86400),
+});
+
+export const aiMvpTaskResponseSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+});
+
 export const aiTaskResponseSchema = z.object({
   title: z.string(),
   instructions: z.string(),
@@ -31,4 +41,5 @@ export const aiTaskResponseSchema = z.object({
   rationale: z.string(),
 });
 
+export type AiMvpTaskResponse = z.infer<typeof aiMvpTaskResponseSchema>;
 export type AiTaskResponse = z.infer<typeof aiTaskResponseSchema>;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { ensureProfileSession } from "@/lib/profiles/ensure-profile-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,8 @@ export function LoginForm() {
       setLoading(false);
       return;
     }
+
+    await ensureProfileSession();
 
     router.push("/dashboard");
     router.refresh();

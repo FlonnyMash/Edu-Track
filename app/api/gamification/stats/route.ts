@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureProfile } from "@/lib/profiles/ensure-profile";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -9,6 +10,11 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ensured = await ensureProfile(user.id);
+  if (!ensured.ok) {
+    return NextResponse.json({ error: ensured.error }, { status: 500 });
   }
 
   const { data: stats, error } = await supabase
