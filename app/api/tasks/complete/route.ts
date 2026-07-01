@@ -7,8 +7,6 @@ import { getCompanionStage } from "@/lib/gamification/companion";
 import { getMapNodeIndex } from "@/lib/gamification/map";
 import { getLocalDateString, getYesterdayDateString } from "@/lib/utils";
 
-export const runtime = "edge";
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
