@@ -1,0 +1,10 @@
+{
+  "name": "Edu Track",
+  "short_name": "EduTrack",
+  "description": "AI-powered daily learning planner",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f0a1a",
+  "theme_color": "#ff6b9d",
+  "icons": []
+}

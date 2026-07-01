@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `npm run preview` (Wrangler local Pages dev)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+OPENAI_API_KEY=sk-your-openai-key
+NEXT_PUBLIC_APP_URL=http://localhost:8788
