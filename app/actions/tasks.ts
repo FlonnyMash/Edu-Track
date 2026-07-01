@@ -1,7 +1,10 @@
 "use server";
 
 import { generateMvpDailyTask } from "@/lib/ai/generate-daily-task";
+import { cacheTaskGlossaryTerms } from "@/lib/glossary/cache-task-terms";
+import { getGlossaryContext } from "@/lib/glossary/get-glossary-context";
 import { getUserProgress } from "@/lib/progress/user-progress";
+import { extractUniqueTaskTerms } from "@/lib/tasks/parser";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDateString } from "@/lib/utils";
 import type { DailyTask } from "@/types/database";
@@ -65,13 +68,24 @@ export async function getOrGenerateDailyTask(
       difficulty_level: h.difficulty_level,
     }));
 
+  const glossaryEntries = await getGlossaryContext();
+
   const { task: aiTask, metadata } = await generateMvpDailyTask(
     learningTopic,
     currentDay,
     profile?.learning_material,
     currentProgress,
-    history
+    history,
+    glossaryEntries
   );
+
+  const glossaryTerms = extractUniqueTaskTerms(aiTask.instructions);
+  await cacheTaskGlossaryTerms(glossaryTerms);
+
+  const taskMetadata = {
+    ...metadata,
+    glossary_terms: glossaryTerms,
+  };
 
   const { data: newTask, error: insertError } = await supabase
     .from("daily_tasks")
@@ -84,7 +98,7 @@ export async function getOrGenerateDailyTask(
       instructions: aiTask.instructions,
       estimated_minutes: aiTask.estimated_minutes,
       difficulty_level: aiTask.difficulty_level,
-      ai_metadata: metadata,
+      ai_metadata: taskMetadata,
       status: "pending",
     })
     .select()
@@ -123,7 +137,7 @@ export async function getOrGenerateDailyTask(
       task_id: newTask.id,
       day_number: currentDay,
       topic: learningTopic,
-      metadata,
+      metadata: taskMetadata,
     },
   });
 

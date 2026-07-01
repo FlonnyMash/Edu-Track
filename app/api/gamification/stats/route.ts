@@ -33,8 +33,17 @@ export async function GET() {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  const { count: completedCount } = await supabase
+    .from("daily_tasks")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "completed");
+
+  const currentDay = (completedCount ?? 0) + 1;
+
   return NextResponse.json({
     stats,
     trackTitle: track?.title ?? null,
+    currentDay,
   });
 }

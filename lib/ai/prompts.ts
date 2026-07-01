@@ -1,6 +1,6 @@
 import type { LearningTrack } from "@/types/database";
 import { parseLearningMaterials } from "@/lib/profiles/learning-materials";
-
+import type { GlossaryEntry } from "@/lib/glossary/types";
 export interface CurrentProgress {
   chapter: string;
   masteredTopics: string[];
@@ -164,13 +164,36 @@ function buildHandwritingBlock(dayNumber: number): string {
   ].join("\n");
 }
 
+function buildGlossaryBlock(glossaryEntries: GlossaryEntry[]): string {
+  if (glossaryEntries.length === 0) {
+    return [
+      "── KNOWN GLOSSARY (database) ──",
+      "No glossary terms stored yet. Tag at least 3 important terms with [TERM:term];",
+      "they will be cached automatically for future sessions.",
+    ].join("\n");
+  }
+
+  const termLines = glossaryEntries.map(
+    (entry) => `  • [TERM:${entry.term}] — ${entry.definition}`
+  );
+
+  return [
+    "── KNOWN GLOSSARY (database) ──",
+    "Prefer these terms when they fit today's session. Use the exact tag spelling shown.",
+    "Do not re-explain tagged terms inline — the user clicks them for definitions.",
+    ...termLines,
+    "You may add new [TERM:...] tags for other important words not listed above.",
+  ].join("\n");
+}
+
 /**
  * Builds the Master Prompt system message for daily Japanese session generation.
  */
 export function getDailyTaskPrompt(
   learningMaterials: string | string[] | null | undefined,
   currentProgress: CurrentProgress,
-  dayNumber: number
+  dayNumber: number,
+  glossaryEntries: GlossaryEntry[] = []
 ): string {
   const materials = Array.isArray(learningMaterials)
     ? learningMaterials.map((m) => m.trim()).filter(Boolean)
@@ -190,6 +213,7 @@ export function getDailyTaskPrompt(
 
   const progressionBlock = buildProgressionBlock(materials);
   const handwritingBlock = buildHandwritingBlock(dayNumber);
+  const glossaryBlock = buildGlossaryBlock(glossaryEntries);
 
   const masteredList =
     currentProgress.masteredTopics.length > 0
@@ -245,7 +269,15 @@ export function getDailyTaskPrompt(
     "Example: 'Use [TERM:genkouyoushi] for your writing practice.'",
     "Tag tools, scripts, grammar labels, and study resources",
     "(e.g. [TERM:hiragana], [TERM:katakana], [TERM:desu]).",
+    "When a word is wrapped in [TERM:...], do NOT explain it inline — the user",
+    "clicks the term for a definition. Never add glosses, translations, or",
+    "parentheticals right after a tag.",
+    "Wrong: 'Use [TERM:genkouyoushi] (square writing paper) for practice.'",
+    "Wrong: 'Learn [TERM:hiragana], the basic Japanese syllabary, today.'",
+    "Right: 'Use [TERM:genkouyoushi] for your handwriting practice.'",
     "Do NOT use [Topic:X] or [Chapter:Y] tags anywhere in Part 1.",
+    "",
+    glossaryBlock,
     "",
     "── PLAYFUL LEARNING ──",
     "- Frequently suggest external auditory/visual aids to make the session engaging.",

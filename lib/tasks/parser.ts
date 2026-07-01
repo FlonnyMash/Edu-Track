@@ -15,6 +15,22 @@ function normalizeTermTags(content: string): string {
     .replace(/(\*\*|__|\*|_|`)+(\[\s*TERM\s*:[^\]]+?\])(\*\*|__|\*|_|`)+/gi, "$2");
 }
 
+/** Returns unique normalized terms from [TERM:...] tags in task copy. */
+export function extractUniqueTaskTerms(
+  content: string | null | undefined
+): string[] {
+  const segments = parseTaskContent(content);
+  const seen = new Set<string>();
+
+  for (const segment of segments) {
+    if (segment.type !== "term") continue;
+    const term = segment.value?.trim().toLowerCase();
+    if (term) seen.add(term);
+  }
+
+  return [...seen];
+}
+
 /** Splits task copy into plain text and glossary term segments. */
 export function parseTaskContent(content: string | null | undefined): TaskContentSegment[] {
   if (content == null || content === "") {

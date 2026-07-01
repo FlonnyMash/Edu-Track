@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeTaskAction } from "@/app/actions/complete-task";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -19,27 +19,29 @@ export function DashboardClient() {
   const [task, setTask] = useState<DailyTask | null>(null);
   const [stats, setStats] = useState<GamificationStats | null>(null);
   const [trackTitle, setTrackTitle] = useState<string | null>(null);
+  const [displayDay, setDisplayDay] = useState(1);
   const [taskLoading, setTaskLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completionOpen, setCompletionOpen] = useState(false);
   const [highlightNode, setHighlightNode] = useState<number | null>(null);
+  const hasLoadedStatsRef = useRef(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { optimisticDayDelta?: number }) => {
     setError(null);
     setTaskLoading(true);
-    setStatsLoading(true);
-
-    const taskPromise = fetch("/api/tasks/today")
-      .then(async (taskRes) => {
-        if (!taskRes.ok) {
-          const data = await taskRes.json();
-          throw new Error(data.error || "Failed to load task");
+    setTask((current) => {
+      if (current) {
+        if (options?.optimisticDayDelta) {
+          setDisplayDay(current.day_number + options.optimisticDayDelta);
         }
-        const taskData = await taskRes.json();
-        setTask(taskData.task);
-      })
-      .finally(() => setTaskLoading(false));
+        return null;
+      }
+      return current;
+    });
+    if (!hasLoadedStatsRef.current) {
+      setStatsLoading(true);
+    }
 
     const statsPromise = fetch("/api/gamification/stats")
       .then(async (statsRes) => {
@@ -50,8 +52,26 @@ export function DashboardClient() {
         const statsData = await statsRes.json();
         setStats(statsData.stats);
         setTrackTitle(statsData.trackTitle);
+        if (typeof statsData.currentDay === "number") {
+          setDisplayDay(statsData.currentDay);
+        }
+        hasLoadedStatsRef.current = true;
       })
       .finally(() => setStatsLoading(false));
+
+    const taskPromise = fetch("/api/tasks/today")
+      .then(async (taskRes) => {
+        if (!taskRes.ok) {
+          const data = await taskRes.json();
+          throw new Error(data.error || "Failed to load task");
+        }
+        const taskData = await taskRes.json();
+        setTask(taskData.task);
+        if (taskData.task?.day_number != null) {
+          setDisplayDay(taskData.task.day_number);
+        }
+      })
+      .finally(() => setTaskLoading(false));
 
     try {
       await Promise.all([taskPromise, statsPromise]);
@@ -66,7 +86,7 @@ export function DashboardClient() {
 
   useEffect(() => {
     function handleRefresh() {
-      fetchData();
+      fetchData({ optimisticDayDelta: 1 });
     }
 
     window.addEventListener("edu-track:refresh", handleRefresh);
@@ -83,6 +103,7 @@ export function DashboardClient() {
 
     setTask(data.task);
     setStats(data.stats);
+    setDisplayDay(data.task.day_number);
     const activeNode = getActiveMapNode(
       data.task.day_number,
       data.task.status === "completed"
@@ -92,27 +113,13 @@ export function DashboardClient() {
     router.refresh();
   }
 
-  const initialLoading = taskLoading && statsLoading;
-
-  if (initialLoading) {
-    return (
-      <div className="mx-auto flex w-full max-w-md flex-col gap-8 px-1">
-        <div className="h-8 w-40 animate-pulse rounded-lg border border-pink-500/10 bg-city-navy-light/60" />
-        <div className="h-14 animate-pulse rounded-2xl border border-pink-500/10 bg-city-navy-light/60" />
-        <div className="h-48 animate-pulse rounded-2xl border border-pink-500/10 bg-city-navy-light/60" />
-        <DailyTaskCardSkeleton />
-        <div className="h-24 animate-pulse rounded-2xl border border-teal-500/20 bg-city-navy-light/60" />
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="mx-auto w-full max-w-md px-1">
         <Card className="border-pink-500/20 bg-city-navy-light p-6 text-center">
           <p className="text-red-400">{error}</p>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="mt-4 text-sm text-city-teal transition-transform active:scale-95 hover:underline"
           >
             Try again
@@ -122,7 +129,7 @@ export function DashboardClient() {
     );
   }
 
-  if (!stats) {
+  if (!statsLoading && !stats) {
     return (
       <div className="mx-auto w-full max-w-md px-1">
         <Card className="border-pink-500/20 bg-city-navy-light p-6 text-center">
@@ -138,17 +145,24 @@ export function DashboardClient() {
         Dashboard
       </h1>
 
-      <DashboardHeader
-        streak={stats.current_streak}
-        totalXp={stats.total_xp}
-      />
+      {statsLoading || !stats ? (
+        <div className="flex gap-3">
+          <div className="h-14 flex-1 animate-pulse rounded-2xl border border-pink-500/10 bg-city-navy-light/60" />
+          <div className="h-14 flex-1 animate-pulse rounded-2xl border border-teal-500/10 bg-city-navy-light/60" />
+        </div>
+      ) : (
+        <DashboardHeader
+          streak={stats.current_streak}
+          totalXp={stats.total_xp}
+        />
+      )}
 
       <Card className="relative flex justify-center overflow-hidden border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
         <div className="collectible-glow pointer-events-none absolute inset-0" />
         <CompanionSprite
-          currentDay={task?.day_number ?? 1}
+          currentDay={displayDay}
           trackTitle={trackTitle ?? undefined}
-          dayNumber={task?.day_number ?? 1}
+          dayNumber={displayDay}
         />
       </Card>
 
@@ -165,8 +179,8 @@ export function DashboardClient() {
 
       <Card className="relative overflow-hidden border-teal-500/20 bg-city-navy-light/80 p-5 shadow-[0_6px_0_0_rgba(0,0,0,0.2)]">
         <ProgressMap
-          currentDay={task?.day_number ?? 1}
-          isTodayCompleted={task?.status === "completed"}
+          currentDay={displayDay}
+          isTodayCompleted={!taskLoading && task?.status === "completed"}
           highlightNode={highlightNode}
         />
       </Card>

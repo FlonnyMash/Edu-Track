@@ -66,8 +66,8 @@ export function TermTrigger({ term, className }: TermTriggerProps) {
         type="button"
         onClick={handleOpen}
         className={cn(
-          "inline cursor-pointer border-b border-city-teal/50 text-city-teal",
-          "underline decoration-city-teal/40 decoration-dotted underline-offset-2",
+          "inline cursor-pointer text-city-teal",
+          "underline decoration-city-teal/50 decoration-dotted underline-offset-2",
           "transition-all hover:text-city-teal hover:drop-shadow-[0_0_6px_rgba(61,219,207,0.45)]",
           className
         )}
