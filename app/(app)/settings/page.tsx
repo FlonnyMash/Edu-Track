@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [description, setDescription] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("balanced");
   const [timezone, setTimezone] = useState("UTC");
+  const [currentChapter, setCurrentChapter] = useState("Hiragana");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -30,11 +31,17 @@ export default function SettingsPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [{ data: profile }, { data: track }] = await Promise.all([
+      const [{ data: profile }, { data: track }, { data: progress }] =
+        await Promise.all([
         supabase.from("profiles").select("timezone").eq("id", user.id).single(),
         supabase
           .from("learning_tracks")
           .select("title, description, difficulty_preference")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("user_progress")
+          .select("current_chapter")
           .eq("user_id", user.id)
           .maybeSingle(),
       ]);
@@ -47,6 +54,11 @@ export default function SettingsPage() {
         setDescription(track.description || "");
         setDifficulty(track.difficulty_preference as Difficulty);
       }
+
+      if (progress?.current_chapter) {
+        setCurrentChapter(progress.current_chapter);
+      }
+
       setLoading(false);
     }
     load();
@@ -79,8 +91,20 @@ export default function SettingsPage() {
       { onConflict: "user_id" }
     );
 
+    const { error: progressError } = await supabase.from("user_progress").upsert(
+      {
+        user_id: user.id,
+        current_chapter: currentChapter.trim() || "Hiragana",
+      },
+      { onConflict: "user_id" }
+    );
+
     setSaving(false);
-    setMessage(error ? error.message : "Settings saved!");
+    setMessage(
+      error || progressError
+        ? error?.message || progressError?.message || "Save failed"
+        : "Settings saved!"
+    );
   }
 
   async function handleSignOut() {
@@ -129,6 +153,20 @@ export default function SettingsPage() {
                 <option value="balanced">Balanced</option>
                 <option value="ambitious">Ambitious</option>
               </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm text-white/70">
+                Current chapter / lesson
+              </label>
+              <Input
+                value={currentChapter}
+                onChange={(e) => setCurrentChapter(e.target.value)}
+                placeholder="e.g. Genki I Lesson 3"
+              />
+              <p className="mt-1.5 text-xs text-white/50">
+                Override where the AI thinks you are in your curriculum. The AI
+                will still suggest advancing after completed tasks.
+              </p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm text-white/70">Timezone</label>

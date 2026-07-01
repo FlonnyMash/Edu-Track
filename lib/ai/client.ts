@@ -1,5 +1,5 @@
 export const AI_MODEL = "gpt-4o-mini";
-export const PROMPT_VERSION = "v1";
+export const PROMPT_VERSION = "v4";
 
 export function getOpenAIApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;

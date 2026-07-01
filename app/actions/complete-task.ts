@@ -29,6 +29,7 @@ export async function completeTaskAction(taskId: string, reflectionNotes?: strin
 
   revalidatePath("/dashboard");
   revalidatePath("/tamagotchi");
+  revalidatePath("/settings");
 
   return result;
 }

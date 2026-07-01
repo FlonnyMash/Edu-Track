@@ -15,6 +15,7 @@ export type Database = {
           display_name: string | null;
           timezone: string;
           onboarding_completed: boolean;
+          learning_material: string | null;
           coins: number;
           is_admin: boolean;
           created_at: string;
@@ -25,6 +26,7 @@ export type Database = {
           display_name?: string | null;
           timezone?: string;
           onboarding_completed?: boolean;
+          learning_material?: string | null;
           coins?: number;
           is_admin?: boolean;
           created_at?: string;
@@ -35,10 +37,50 @@ export type Database = {
           display_name?: string | null;
           timezone?: string;
           onboarding_completed?: boolean;
+          learning_material?: string | null;
           coins?: number;
           is_admin?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      user_progress: {
+        Row: {
+          user_id: string;
+          current_chapter: string;
+          mastered_topics: Json;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          current_chapter?: string;
+          mastered_topics?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          current_chapter?: string;
+          mastered_topics?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      glossary: {
+        Row: {
+          term: string;
+          definition: string;
+          created_at: string;
+        };
+        Insert: {
+          term: string;
+          definition: string;
+          created_at?: string;
+        };
+        Update: {
+          term?: string;
+          definition?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -335,6 +377,7 @@ export type Database = {
   };
 };
 
+export type UserProgress = Database["public"]["Tables"]["user_progress"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type LearningTrack = Database["public"]["Tables"]["learning_tracks"]["Row"];
 export type DailyTask = Database["public"]["Tables"]["daily_tasks"]["Row"];

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TaskContent } from "@/components/dashboard/TaskContent";
 import type { DailyTask } from "@/types/database";
 
 interface DailyTaskCardProps {
@@ -28,17 +29,25 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
           <CardTitle className="text-2xl font-extrabold leading-tight text-white">
             {task.title}
           </CardTitle>
-          {task.estimated_minutes && (
-            <div className="flex items-center gap-1.5 text-sm text-city-muted">
-              <Clock className="h-4 w-4" />
-              ~{task.estimated_minutes} min
+          {task.estimated_minutes != null && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-city-teal/30 bg-city-teal/10 px-3 py-1 text-sm font-medium text-city-teal">
+                <Clock className="h-3.5 w-3.5" />
+                ~{task.estimated_minutes} min
+              </span>
+              {task.estimated_minutes > 30 && (
+                <span className="rounded-full border border-city-orange/40 bg-city-orange/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-city-orange">
+                  Ambitious Session
+                </span>
+              )}
             </div>
           )}
         </CardHeader>
         <CardContent>
-          <p className="mb-6 whitespace-pre-wrap text-base leading-relaxed text-white/85">
-            {task.instructions}
-          </p>
+          <TaskContent
+            content={task.instructions}
+            className="mb-6 whitespace-pre-wrap text-base leading-relaxed text-white/85"
+          />
           {isCompleted ? (
             <motion.div
               className="flex items-center justify-center gap-2 rounded-xl border border-city-teal/30 bg-city-teal/15 py-4 text-city-teal shadow-[0_4px_0_0_rgba(0,0,0,0.2)]"

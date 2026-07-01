@@ -11,11 +11,23 @@ export const signupSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+export const LEARNING_MATERIAL_PRESETS = [
+  "Genki 1",
+  "Genki 1 Workbook",
+  "Tae Kim's Guide",
+  "Duolingo",
+  "Custom/Other",
+] as const;
+
 export const goalSetupSchema = z.object({
   title: z.string().min(2, "Goal title is required").max(100),
   description: z.string().max(500).optional(),
   difficultyPreference: z.enum(["gentle", "balanced", "ambitious"]),
   timezone: z.string().min(1),
+  learningMaterials: z
+    .array(z.string().trim().min(1).max(100))
+    .max(10)
+    .optional(),
 });
 
 export const completeTaskSchema = z.object({
@@ -82,10 +94,43 @@ export const tamagotchiPhaseFormSchema = z
     }
   });
 
+export const glossaryTermSchema = z.object({
+  term: z.string().trim().min(1).max(100),
+});
+
+export const progressionActionSchema = z.enum(["advance", "stay", "review"]);
+
+export const recommendProgressionSchema = z.object({
+  chapter: z.string(),
+  action: progressionActionSchema,
+});
+
+export const progressionEvaluationSchema = z.object({
+  chapter: z.string(),
+  action: progressionActionSchema,
+  mastered_topics: z.array(z.string()),
+});
+
+export const sessionMetadataSchema = z.object({
+  topic: z.string(),
+  chapter: z.string(),
+  next_recommended_action: progressionActionSchema,
+  estimated_duration: z.number().int().min(20).max(35),
+});
+
 export const aiMvpTaskResponseSchema = z.object({
   title: z.string(),
   description: z.string(),
+  estimated_minutes: z.number().int().min(20).max(35),
+  recommend_progression: recommendProgressionSchema,
 });
+
+export type RecommendProgression = z.infer<typeof recommendProgressionSchema>;
+export type ProgressionEvaluation = {
+  chapter: string;
+  action: z.infer<typeof progressionActionSchema>;
+  masteredTopics: string[];
+};
 
 export const aiTaskResponseSchema = z.object({
   title: z.string(),

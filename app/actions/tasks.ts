@@ -1,6 +1,7 @@
 "use server";
 
 import { generateMvpDailyTask } from "@/lib/ai/generate-daily-task";
+import { getUserProgress } from "@/lib/progress/user-progress";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDateString } from "@/lib/utils";
 import type { DailyTask } from "@/types/database";
@@ -36,17 +37,40 @@ export async function getOrGenerateDailyTask(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("timezone")
+    .select("timezone, learning_material")
     .eq("id", userId)
     .single();
 
   const timezone = profile?.timezone || "UTC";
   const localToday = getLocalDateString(timezone);
   const learningTopic = topic || track.title || "Japanese";
+  const currentProgress = await getUserProgress(userId);
+
+  const { data: recentCompleted } = await supabase
+    .from("daily_tasks")
+    .select("day_number, title, instructions, reflection_notes, difficulty_level")
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("day_number", { ascending: false })
+    .limit(5);
+
+  const history = (recentCompleted ?? [])
+    .slice()
+    .reverse()
+    .map((h) => ({
+      day_number: h.day_number,
+      title: h.title,
+      instructions: h.instructions,
+      reflection_notes: h.reflection_notes,
+      difficulty_level: h.difficulty_level,
+    }));
 
   const { task: aiTask, metadata } = await generateMvpDailyTask(
     learningTopic,
-    currentDay
+    currentDay,
+    profile?.learning_material,
+    currentProgress,
+    history
   );
 
   const { data: newTask, error: insertError } = await supabase

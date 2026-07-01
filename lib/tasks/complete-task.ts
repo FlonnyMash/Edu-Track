@@ -3,6 +3,15 @@ import { calculateXpAward } from "@/lib/gamification/xp";
 import { calculateCoinAward } from "@/lib/gamification/coins";
 import { getCompanionStage } from "@/lib/gamification/companion";
 import { getMapNodeIndex } from "@/lib/gamification/map";
+import {
+  applyProgressionEvaluation,
+  evaluateProgressAfterCompletion,
+} from "@/lib/ai/evaluate-progress";
+import { parseLearningMaterials } from "@/lib/profiles/learning-materials";
+import {
+  getUserProgress,
+  upsertUserProgress,
+} from "@/lib/progress/user-progress";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDateString, getYesterdayDateString } from "@/lib/utils";
 import type { DailyTask, GamificationStats } from "@/types/database";
@@ -12,6 +21,10 @@ export type CompleteTaskResult = {
   xpAwarded: number;
   coinsAwarded: number;
   task: DailyTask;
+  progressionUpdate?: {
+    chapter: string;
+    action: "advance" | "stay" | "review";
+  };
 };
 
 export async function completeTask(
@@ -38,7 +51,7 @@ export async function completeTask(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("timezone")
+    .select("timezone, learning_material")
     .eq("id", userId)
     .single();
 
@@ -137,10 +150,44 @@ export async function completeTask(
     },
   });
 
+  const currentProgress = await getUserProgress(userId);
+  const learningMaterials = parseLearningMaterials(profile?.learning_material);
+
+  const evaluation = await evaluateProgressAfterCompletion({
+    taskTitle: task.title,
+    taskInstructions: task.instructions,
+    reflectionNotes: reflectionNotes ?? null,
+    currentProgress,
+    learningMaterials,
+  });
+
+  const updatedProgress = applyProgressionEvaluation(
+    currentProgress,
+    evaluation
+  );
+
+  await upsertUserProgress(userId, updatedProgress);
+
+  await supabase.from("activity_logs").insert({
+    user_id: userId,
+    event_type: "progression_updated",
+    payload: {
+      task_id: taskId,
+      action: evaluation.action,
+      previous_chapter: currentProgress.chapter,
+      new_chapter: updatedProgress.chapter,
+      mastered_topics: updatedProgress.masteredTopics,
+    },
+  });
+
   return {
     stats: updatedStats,
     xpAwarded,
     coinsAwarded,
     task: { ...task, status: "completed" as const },
+    progressionUpdate: {
+      chapter: updatedProgress.chapter,
+      action: evaluation.action,
+    },
   };
 }
