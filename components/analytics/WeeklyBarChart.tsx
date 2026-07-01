@@ -1,7 +1,7 @@
 "use client";
 
-import { formatStudyDuration } from "@/lib/analytics/study-analytics";
-import type { DayBucket } from "@/lib/analytics/study-analytics";
+import { formatStudyDuration } from "@/lib/analytics/format-study-duration";
+import type { DayBucket } from "@/lib/analytics/types";
 
 interface WeeklyBarChartProps {
   buckets: DayBucket[];

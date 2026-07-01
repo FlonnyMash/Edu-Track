@@ -1,33 +1,10 @@
 import { ensureProfile } from "@/lib/profiles/ensure-profile";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDateString, shiftDateString } from "@/lib/utils";
+import type { DayBucket, StudyAnalytics } from "@/lib/analytics/types";
 
-export type DayBucket = { dateKey: string; label: string; minutes: number };
-
-export type StudyAnalytics = {
-  totalSeconds: number;
-  weekSeconds: number;
-  sessionCount: number;
-  currentStreak: number;
-  weeklyBuckets: DayBucket[];
-  hasData: boolean;
-};
-
-export function formatStudyDuration(seconds: number): string {
-  const totalMinutes = Math.round(seconds / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours === 0) {
-    return `${minutes}m`;
-  }
-
-  if (minutes === 0) {
-    return `${hours}h`;
-  }
-
-  return `${hours}h ${minutes}m`;
-}
+export type { DayBucket, StudyAnalytics } from "@/lib/analytics/types";
+export { formatStudyDuration } from "@/lib/analytics/format-study-duration";
 
 function toLocalDateKey(iso: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
