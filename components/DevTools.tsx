@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { Wrench } from "lucide-react";
 import { skipToNextDay } from "@/app/actions/dev-tools";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function DevTools() {
+  const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,21 +30,46 @@ export function DevTools() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-56 rounded-2xl border-2 border-city-magenta bg-city-navy/85 p-4 shadow-[0_0_24px_rgba(255,77,141,0.35)] backdrop-blur-xl">
-      <p className="pixel-label mb-3 text-city-magenta">Dev Tools</p>
-      <Button
-        onClick={handleSkipDay}
-        disabled={isLoading}
-        className="w-full bg-city-magenta shadow-[0_6px_0_0_#B8326A] transition-all hover:brightness-110 active:translate-y-1 active:scale-95 active:shadow-[0_2px_0_0_#B8326A]"
-        size="sm"
-      >
-        {isLoading ? "Skipping…" : "⏩ Skip +1 Day"}
-      </Button>
-      {error && (
-        <p className="mt-2 text-xs text-red-400" role="alert">
-          {error}
-        </p>
-      )}
+    <div className="pointer-events-none absolute right-3 top-3 z-50">
+      <div className="pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "flex items-center gap-1 rounded-full border border-white/10 bg-black/40 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-white/50 backdrop-blur-md transition-colors hover:text-city-teal",
+            open && "border-city-magenta/30 text-city-magenta"
+          )}
+          aria-expanded={open}
+          aria-label="Toggle dev tools"
+        >
+          <Wrench className="h-3 w-3" />
+          Dev
+        </button>
+
+        {open && (
+          <div className="absolute right-0 mt-1.5 w-44 rounded-lg border border-white/10 bg-black/70 p-2.5 text-xs shadow-lg backdrop-blur-xl">
+            <button
+              type="button"
+              onClick={handleSkipDay}
+              disabled={isLoading}
+              className="w-full rounded-md bg-city-magenta/80 px-2 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-city-magenta disabled:opacity-50"
+            >
+              {isLoading ? "Skipping…" : "⏩ Skip +1 Day"}
+            </button>
+            <Link
+              href="/admin/tamagotchi"
+              className="mt-1.5 block rounded-md px-2 py-1.5 text-[11px] text-city-teal hover:bg-white/5"
+            >
+              Tamagotchi Admin →
+            </Link>
+            {error && (
+              <p className="mt-1.5 text-[10px] leading-tight text-red-400" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

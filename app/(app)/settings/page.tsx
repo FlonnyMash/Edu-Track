@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResetZone } from "@/components/Settings/ResetZone";
 import { detectTimezone } from "@/lib/utils";
 
 type Difficulty = "gentle" | "balanced" | "ambitious";
@@ -144,6 +145,8 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ResetZone />
 
       <Button variant="destructive" onClick={handleSignOut} className="w-full">
         Sign Out

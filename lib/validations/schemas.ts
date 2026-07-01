@@ -28,6 +28,60 @@ export const saveStudySessionSchema = z.object({
   durationSeconds: z.number().int().min(1).max(86400),
 });
 
+export const buyShopItemSchema = z.object({
+  itemId: z.string().uuid(),
+});
+
+export const toggleEquipItemSchema = z.object({
+  inventoryId: z.string().uuid(),
+  equip: z.boolean(),
+});
+
+export const hardResetConfirmSchema = z.object({
+  confirmText: z.literal("WIPE"),
+});
+
+export const grantSelfCoinsSchema = z.object({
+  amount: z.number().int().min(1).max(1000000),
+});
+
+export const shopItemFormSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1).max(100),
+  type: z.enum(["food", "head", "accessory", "background"]),
+  price: z.number().int().min(0).max(100000),
+  imageUrl: z.string().url(),
+  zIndex: z.number().int().min(0).max(100),
+});
+
+export const tamagotchiPhaseFormSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    phaseKind: z.enum(["starter", "mood"]),
+    dayNumber: z.number().int().min(1).max(4).optional(),
+    phaseName: z.string().min(1).max(50).optional(),
+    rotationOrder: z.number().int().min(0).max(100).optional(),
+    imageUrl: z.string().url(),
+    conditionDescription: z.string().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.phaseKind === "starter") {
+      if (!data.dayNumber) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Starter phases require day 1–4",
+          path: ["dayNumber"],
+        });
+      }
+    } else if (!data.phaseName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Mood phases require a name (e.g. happy)",
+        path: ["phaseName"],
+      });
+    }
+  });
+
 export const aiMvpTaskResponseSchema = z.object({
   title: z.string(),
   description: z.string(),

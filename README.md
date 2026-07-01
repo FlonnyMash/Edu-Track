@@ -17,6 +17,8 @@ npm install
 npm run dev
 ```
 
+If the UI looks unstyled: stop the dev server, delete the `.next` folder, then run `npm run dev` again.
+
 ## Cloudflare Deployment
 
 See **[DEPLOYMENT.md](DEPLOYMENT.md)** for full instructions.

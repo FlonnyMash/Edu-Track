@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
-import { DevTools } from "@/components/DevTools";
+import { AppToaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -21,10 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${outfit.variable} font-sans antialiased`}>
-        {children}
-        <DevTools />
+    <html lang="en" className={outfit.variable}>
+      <body className="font-sans antialiased">
+        <div className="app-desktop-frame">{children}</div>
+        <AppToaster />
       </body>
     </html>
   );

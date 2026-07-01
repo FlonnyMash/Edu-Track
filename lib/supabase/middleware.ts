@@ -39,12 +39,25 @@ export async function updateSession(request: NextRequest) {
   const isAppRoute =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/analytics") ||
+    pathname.startsWith("/tamagotchi") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/settings");
+  const isAdminRoute = pathname.startsWith("/admin");
   const isApiRoute = pathname.startsWith("/api");
   const isAuthCallback = pathname.startsWith("/auth/callback");
+  const isLocalDev = process.env.NEXT_PUBLIC_DEV_MODE === "true";
+
+  if (isAdminRoute && !isLocalDev) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   if (!user && isAppRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  if (!user && isAdminRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

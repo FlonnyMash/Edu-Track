@@ -35,12 +35,14 @@ If you prefer split build/deploy:
 ## Local commands
 
 ```bash
-npm run dev       # Next.js dev server
+npm run dev       # Next.js dev server (use this for UI work)
 npm run preview   # Build + preview in workerd runtime
 npm run deploy    # Build + deploy to Cloudflare
 ```
 
 For local preview secrets, copy `.dev.vars.example` to `.dev.vars`.
+
+Use `npm run preview` to test the Cloudflare worker locally — do not import `@opennextjs/cloudflare` in `next.config.mjs` during normal `npm run dev` (it breaks Tailwind CSS). If styles look broken, stop the dev server, delete the `.next` folder, and run `npm run dev` again.
 
 ## Migrated from next-on-pages
 

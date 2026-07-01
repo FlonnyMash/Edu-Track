@@ -1,5 +1,6 @@
 import { calculateStreakUpdate, calculateLongestStreak } from "@/lib/gamification/streak";
 import { calculateXpAward } from "@/lib/gamification/xp";
+import { calculateCoinAward } from "@/lib/gamification/coins";
 import { getCompanionStage } from "@/lib/gamification/companion";
 import { getMapNodeIndex } from "@/lib/gamification/map";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +10,7 @@ import type { DailyTask, GamificationStats } from "@/types/database";
 export type CompleteTaskResult = {
   stats: GamificationStats;
   xpAwarded: number;
+  coinsAwarded: number;
   task: DailyTask;
 };
 
@@ -62,6 +64,7 @@ export async function completeTask(
   );
 
   const xpAwarded = calculateXpAward(currentStreak);
+  const coinsAwarded = calculateCoinAward(currentStreak);
   const newTotalXp = stats.total_xp + xpAwarded;
   const longestStreak = calculateLongestStreak(currentStreak, stats.longest_streak);
   const companionStage = getCompanionStage(newTotalXp);
@@ -114,12 +117,21 @@ export async function completeTask(
     throw new Error(statsError?.message ?? "Failed to update stats");
   }
 
+  const { error: coinsError } = await supabase.rpc("award_coins", {
+    p_amount: coinsAwarded,
+  });
+
+  if (coinsError) {
+    throw new Error(coinsError.message);
+  }
+
   await supabase.from("activity_logs").insert({
     user_id: userId,
     event_type: streakBroken ? "task_completed_streak_reset" : "task_completed",
     payload: {
       task_id: taskId,
       xp_awarded: xpAwarded,
+      coins_awarded: coinsAwarded,
       reflection_notes: reflectionNotes || null,
       day_number: task.day_number,
     },
@@ -128,6 +140,7 @@ export async function completeTask(
   return {
     stats: updatedStats,
     xpAwarded,
+    coinsAwarded,
     task: { ...task, status: "completed" as const },
   };
 }
