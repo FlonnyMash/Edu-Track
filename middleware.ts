@@ -1,8 +1,20 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+  try {
+    return await updateSession(request);
+  } catch (error) {
+    console.error("Middleware error:", error);
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+
+    if (request.nextUrl.pathname.startsWith("/api")) {
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+
+    return new NextResponse(message, { status: 500 });
+  }
 }
 
 export const config = {
