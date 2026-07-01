@@ -1,7 +1,7 @@
 "use client";
 
 import { TermTrigger } from "@/components/ui/TermTrigger";
-import { stripHiddenSessionMetadata } from "@/lib/ai/parse-session-response";
+import { prepareTaskInstructionsForDisplay } from "@/lib/ai/parse-session-response";
 import { parseTaskContent, type TaskContentSegment } from "@/lib/tasks/parser";
 
 /** Set to true only while verifying TermTrigger UI in isolation. */
@@ -26,7 +26,7 @@ function renderSegment(segment: TaskContentSegment, index: number) {
 }
 
 export function TaskContent({ content, className }: TaskContentProps) {
-  const displayContent = stripHiddenSessionMetadata(content);
+  const displayContent = prepareTaskInstructionsForDisplay(content);
   const segments = parseTaskContent(displayContent);
 
   return (

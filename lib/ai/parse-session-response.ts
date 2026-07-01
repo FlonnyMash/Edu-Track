@@ -21,9 +21,9 @@ export function stripHiddenSessionMetadata(
 }
 
 function extractTitle(part1: string, dayNumber: number): string {
-  const dayHeading = part1.match(/^#\s*Day\s+\d+[:\s—–-]+\s*(.+)$/im);
-  if (dayHeading?.[0]) {
-    return dayHeading[0].replace(/^#\s*/, "").trim();
+  const dayHeading = part1.match(/^#\s*(Day\s+\d+[:\s—–-].+)$/im);
+  if (dayHeading?.[1]) {
+    return dayHeading[1].trim();
   }
 
   const anyHeading = part1.match(/^#\s*(.+)$/m);
@@ -32,6 +32,19 @@ function extractTitle(part1: string, dayNumber: number): string {
   }
 
   return `Day ${dayNumber}: Japanese Study Session`;
+}
+
+/** Removes the leading markdown H1 used as the session title. */
+export function stripSessionHeading(content: string | null | undefined): string {
+  if (content == null || content === "") return "";
+  return content.replace(/^#\s*.+\n?/, "").trimStart();
+}
+
+/** Strips trailing JSON metadata and the duplicate title heading for display. */
+export function prepareTaskInstructionsForDisplay(
+  content: string | null | undefined
+): string {
+  return stripSessionHeading(stripHiddenSessionMetadata(content));
 }
 
 function parseTrailingJson(raw: string): {
@@ -69,6 +82,7 @@ export function parseTwoPartSession(
 
   const { humanReadable, metadata } = parseTrailingJson(trimmed);
   const title = extractTitle(humanReadable, dayNumber);
+  const body = stripSessionHeading(humanReadable);
 
-  return { title, humanReadable, metadata };
+  return { title, humanReadable: body, metadata };
 }
