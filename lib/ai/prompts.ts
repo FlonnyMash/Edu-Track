@@ -124,6 +124,14 @@ function buildCurriculumAssignmentBlock(progress: SyllabusProgress): string {
     "",
   ];
 
+  if (nextTopic.textbookReference) {
+    lines.push(
+      `Textbook reference (PRIMARY SOURCE OF TRUTH): ${nextTopic.textbookReference}`,
+      "You MUST cite this location explicitly in MAIN QUEST **Theory** and **Application**.",
+      ""
+    );
+  }
+
   if (progress.reviewItems.length === 0) {
     lines.push(
       "CRITICAL: The user has NO review items yet. For the `# SIDE QUEST`, DO NOT generate character reviews.",
@@ -410,6 +418,14 @@ function buildOutputFormatBlock(): string {
   ].join("\n");
 }
 
+function buildTextbookReferenceDirective(textbookReference?: string): string {
+  if (!textbookReference?.trim()) return "";
+  return [
+    "── TEXTBOOK ANCHOR (MANDATORY) ──",
+    `If a textbookReference is provided (Value: ${textbookReference}), you MUST explicitly instruct the user in the **Theory** and **Application** sections to open their textbook to this specific location. Treat the textbook as the primary source of truth.`,
+  ].join("\n");
+}
+
 function buildMaterialGroundingBlock(activeMaterial: string): string {
   const materialLabel =
     activeMaterial.trim() ||
@@ -458,6 +474,9 @@ export function getDailyTaskPrompt(
   const deterministicTopic = syllabusProgress.isCurriculumComplete
     ? "Mastery Consolidation Day"
     : syllabusProgress.nextTopic.title;
+  const textbookReference = syllabusProgress.nextTopic.textbookReference;
+  const textbookReferenceBlock =
+    buildTextbookReferenceDirective(textbookReference);
   const outputFormatBlock = buildOutputFormatBlock();
   const characterListBlock = buildCharacterListFormatBlock();
   const groundingBlock = buildMaterialGroundingBlock(activeMaterial);
@@ -528,6 +547,7 @@ export function getDailyTaskPrompt(
     "    Forvo pronunciation). EXPLAIN how to use each aid (HOW + WHEN relative to the session).",
     "  **Methodology** — Brief synergy: why each material is used and the order of operations.",
     "",
+    ...(textbookReferenceBlock ? [textbookReferenceBlock, ""] : []),
     characterListBlock,
     "",
     "After MAIN QUEST, include exactly this H1 heading:",
@@ -642,6 +662,12 @@ export function buildMvpUserPrompt(
     ? "MAIN QUEST MUST be a Mastery Consolidation Day (comprehensive review, no new material)."
     : `MAIN QUEST MUST EXACTLY teach this topic: ${syllabusProgress.nextTopic.title} and these items: ${syllabusProgress.nextTopic.items.join(", ")}.`;
 
+  const textbookAnchorLine =
+    !syllabusProgress.isCurriculumComplete &&
+    syllabusProgress.nextTopic.textbookReference
+      ? `Textbook anchor for Theory/Application: ${syllabusProgress.nextTopic.textbookReference}.`
+      : null;
+
   return [
     `Learning goal: ${topic}`,
     `Current day number: ${currentDay}`,
@@ -653,6 +679,7 @@ export function buildMvpUserPrompt(
     "",
     `Generate Day ${currentDay}'s comprehensive study session.`,
     mainQuestLine,
+    ...(textbookAnchorLine ? [textbookAnchorLine] : []),
     sideQuestLine,
     "Always include # MAIN QUEST for new learning and # SIDE QUEST for review.",
     "MAIN QUEST sections: Theory, Application, Playful Learning, Methodology.",

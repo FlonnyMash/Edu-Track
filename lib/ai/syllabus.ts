@@ -12,6 +12,8 @@ export interface SyllabusUnit {
   items: string[];
   /** Romanization for character rows (parallel to items). */
   pronunciations?: string[];
+  /** Genki (or other) textbook location for Theory/Application anchoring. */
+  textbookReference?: string;
   type: SyllabusItemType;
 }
 
@@ -23,7 +25,21 @@ export interface SyllabusProgress {
   isCurriculumComplete: boolean;
 }
 
-export const japaneseHiraganaSyllabus: SyllabusUnit[] = [
+const GENKI_HIRAGANA_TEXTBOOK_REF =
+  "Genki I, Kana Chart (Reading and Writing section)";
+const GENKI_KATAKANA_TEXTBOOK_REF =
+  "Genki I, Kana Chart (Reading and Writing section)";
+const GENKI_LESSON1_GREETINGS_REF =
+  "Genki I, Lesson 1: Greetings (Pages 32-33)";
+
+function withTextbookReference(
+  units: SyllabusUnit[],
+  textbookReference: string
+): SyllabusUnit[] {
+  return units.map((unit) => ({ ...unit, textbookReference }));
+}
+
+const hiraganaUnitsBase: SyllabusUnit[] = [
   {
     id: "hiragana_a",
     title: "Hiragana A-row",
@@ -94,9 +110,75 @@ export const japaneseHiraganaSyllabus: SyllabusUnit[] = [
     pronunciations: ["wa", "wo", "n"],
     type: "character",
   },
+  {
+    id: "hiragana_dakuten_1",
+    title: "Hiragana Dakuten (G and Z rows)",
+    items: ["が", "ぎ", "ぐ", "げ", "ご", "ざ", "じ", "ず", "ぜ", "ぞ"],
+    pronunciations: ["ga", "gi", "gu", "ge", "go", "za", "ji", "zu", "ze", "zo"],
+    type: "character",
+  },
+  {
+    id: "hiragana_dakuten_2",
+    title: "Hiragana Dakuten (D and B rows)",
+    items: ["だ", "ぢ", "づ", "で", "ど", "ば", "び", "ぶ", "べ", "ぼ"],
+    pronunciations: ["da", "ji", "zu", "de", "do", "ba", "bi", "bu", "be", "bo"],
+    type: "character",
+  },
+  {
+    id: "hiragana_handakuten",
+    title: "Hiragana Handakuten (P row)",
+    items: ["ぱ", "ぴ", "ぷ", "ぺ", "ぽ"],
+    pronunciations: ["pa", "pi", "pu", "pe", "po"],
+    type: "character",
+  },
+  {
+    id: "hiragana_yoon_1",
+    title: "Hiragana Yōon (K, S, T, N, H)",
+    items: [
+      "きゃ", "きゅ", "きょ",
+      "しゃ", "しゅ", "しょ",
+      "ちゃ", "ちゅ", "ちょ",
+      "にゃ", "にゅ", "にょ",
+      "ひゃ", "ひゅ", "ひょ",
+    ],
+    pronunciations: [
+      "kya", "kyu", "kyo",
+      "sha", "shu", "sho",
+      "cha", "chu", "cho",
+      "nya", "nyu", "nyo",
+      "hya", "hyu", "hyo",
+    ],
+    type: "character",
+  },
+  {
+    id: "hiragana_yoon_2",
+    title: "Hiragana Yōon (M, R, G, J, B, P)",
+    items: [
+      "みゃ", "みゅ", "みょ",
+      "りゃ", "りゅ", "りょ",
+      "ぎゃ", "ぎゅ", "ぎょ",
+      "じゃ", "じゅ", "じょ",
+      "びゃ", "びゅ", "びょ",
+      "ぴゃ", "ぴゅ", "ぴょ",
+    ],
+    pronunciations: [
+      "mya", "myu", "myo",
+      "rya", "ryu", "ryo",
+      "gya", "gyu", "gyo",
+      "ja", "ju", "jo",
+      "bya", "byu", "byo",
+      "pya", "pyu", "pyo",
+    ],
+    type: "character",
+  },
 ];
 
-export const japaneseKatakanaSyllabus: SyllabusUnit[] = [
+export const japaneseHiraganaSyllabus = withTextbookReference(
+  hiraganaUnitsBase,
+  GENKI_HIRAGANA_TEXTBOOK_REF
+);
+
+const katakanaUnitsBase: SyllabusUnit[] = [
   {
     id: "katakana_a",
     title: "Katakana A-row",
@@ -167,13 +249,80 @@ export const japaneseKatakanaSyllabus: SyllabusUnit[] = [
     pronunciations: ["wa", "wo", "n"],
     type: "character",
   },
+  {
+    id: "katakana_dakuten_1",
+    title: "Katakana Dakuten (G and Z rows)",
+    items: ["ガ", "ギ", "グ", "ゲ", "ゴ", "ザ", "ジ", "ズ", "ゼ", "ゾ"],
+    pronunciations: ["ga", "gi", "gu", "ge", "go", "za", "ji", "zu", "ze", "zo"],
+    type: "character",
+  },
+  {
+    id: "katakana_dakuten_2",
+    title: "Katakana Dakuten (D and B rows)",
+    items: ["ダ", "ヂ", "ヅ", "デ", "ド", "バ", "ビ", "ブ", "ベ", "ボ"],
+    pronunciations: ["da", "ji", "zu", "de", "do", "ba", "bi", "bu", "be", "bo"],
+    type: "character",
+  },
+  {
+    id: "katakana_handakuten",
+    title: "Katakana Handakuten (P row)",
+    items: ["パ", "ピ", "プ", "ペ", "ポ"],
+    pronunciations: ["pa", "pi", "pu", "pe", "po"],
+    type: "character",
+  },
+  {
+    id: "katakana_yoon_1",
+    title: "Katakana Yōon (K, S, T, N, H)",
+    items: [
+      "キャ", "キュ", "キョ",
+      "シャ", "シュ", "ショ",
+      "チャ", "チュ", "チョ",
+      "ニャ", "ニュ", "ニョ",
+      "ヒャ", "ヒュ", "ヒョ",
+    ],
+    pronunciations: [
+      "kya", "kyu", "kyo",
+      "sha", "shu", "sho",
+      "cha", "chu", "cho",
+      "nya", "nyu", "nyo",
+      "hya", "hyu", "hyo",
+    ],
+    type: "character",
+  },
+  {
+    id: "katakana_yoon_2",
+    title: "Katakana Yōon (M, R, G, J, B, P)",
+    items: [
+      "ミャ", "ミュ", "ミョ",
+      "リャ", "リュ", "リョ",
+      "ギャ", "ギュ", "ギョ",
+      "ジャ", "ジュ", "ジョ",
+      "ビャ", "ビュ", "ビョ",
+      "ピャ", "ピュ", "ピョ",
+    ],
+    pronunciations: [
+      "mya", "myu", "myo",
+      "rya", "ryu", "ryo",
+      "gya", "gyu", "gyo",
+      "ja", "ju", "jo",
+      "bya", "byu", "byo",
+      "pya", "pyu", "pyo",
+    ],
+    type: "character",
+  },
 ];
+
+export const japaneseKatakanaSyllabus = withTextbookReference(
+  katakanaUnitsBase,
+  GENKI_KATAKANA_TEXTBOOK_REF
+);
 
 export const genkiLesson1Placeholder: SyllabusUnit = {
   id: "genki_1_greetings",
   title: "Genki I: Basic Greetings",
   items: ["おはよう", "こんにちは", "こんばんは", "さようなら", "ありがとう"],
   pronunciations: ["ohayou", "konnichiwa", "konbanwa", "sayounara", "arigatou"],
+  textbookReference: GENKI_LESSON1_GREETINGS_REF,
   type: "vocabulary",
 };
 

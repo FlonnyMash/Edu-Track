@@ -355,6 +355,7 @@ export async function generateMvpDailyTask(
   }
 
   const syllabusProgress = resolveSyllabusProgress(syllabusInput);
+  const textbookReference = syllabusProgress.nextTopic.textbookReference;
 
   console.log("[GenerateDailyTask] Syllabus handoff:", {
     dayNumber,
@@ -447,6 +448,7 @@ export async function generateMvpDailyTask(
         syllabus_progress: {
           next_topic_id: syllabusProgress.nextTopic.id,
           next_topic_title: syllabusProgress.nextTopic.title,
+          textbook_reference: textbookReference ?? null,
           review_items: syllabusProgress.reviewItems,
           completed_unit_ids: syllabusProgress.completedUnitIds,
           is_curriculum_complete: syllabusProgress.isCurriculumComplete,
@@ -482,6 +484,7 @@ export async function generateMvpDailyTask(
         syllabus_progress: {
           next_topic_id: syllabusProgress.nextTopic.id,
           next_topic_title: syllabusProgress.nextTopic.title,
+          textbook_reference: textbookReference ?? null,
           review_items: syllabusProgress.reviewItems,
           completed_unit_ids: syllabusProgress.completedUnitIds,
           is_curriculum_complete: syllabusProgress.isCurriculumComplete,
