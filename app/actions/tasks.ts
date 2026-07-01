@@ -10,9 +10,20 @@ import type { DailyTask } from "@/types/database";
 export async function getOrGenerateDailyTask(
   userId: string,
   currentDay: number,
-  topic: string = "Japanese"
+  topic: string = "Japanese",
+  taskDateOverride?: string
 ): Promise<{ task: DailyTask | null; error?: string }> {
   const supabase = await createClient();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", userId)
+    .single();
+
+  const timezone = profile?.timezone || "UTC";
+  const localToday = getLocalDateString(timezone);
+  const taskDate = taskDateOverride ?? localToday;
 
   const { data: existingTask } = await supabase
     .from("daily_tasks")
@@ -22,6 +33,28 @@ export async function getOrGenerateDailyTask(
     .maybeSingle();
 
   if (existingTask) {
+    if (existingTask.task_date !== taskDate) {
+      const { data: slotTaken } = await supabase
+        .from("daily_tasks")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("task_date", taskDate)
+        .maybeSingle();
+
+      if (!slotTaken) {
+        const { data: updatedTask, error: dateUpdateError } = await supabase
+          .from("daily_tasks")
+          .update({ task_date: taskDate })
+          .eq("id", existingTask.id)
+          .select()
+          .single();
+
+        if (!dateUpdateError && updatedTask) {
+          return { task: updatedTask };
+        }
+      }
+    }
+
     return { task: existingTask };
   }
 
@@ -36,14 +69,6 @@ export async function getOrGenerateDailyTask(
     return { task: null, error: "No active learning track" };
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("timezone")
-    .eq("id", userId)
-    .single();
-
-  const timezone = profile?.timezone || "UTC";
-  const localToday = getLocalDateString(timezone);
   const learningTopic = topic || track.title || "Japanese";
 
   const { task: aiTask, metadata } = await generateMvpDailyTask(
@@ -65,7 +90,7 @@ export async function getOrGenerateDailyTask(
     .insert({
       user_id: userId,
       track_id: track.id,
-      task_date: localToday,
+      task_date: taskDate,
       day_number: currentDay,
       title: aiTask.title,
       instructions: aiTask.instructions,
@@ -90,14 +115,14 @@ export async function getOrGenerateDailyTask(
         return { task: raceTask };
       }
 
-      const { data: todayTask } = await supabase
+      const { data: datedTask } = await supabase
         .from("daily_tasks")
         .select("*")
         .eq("user_id", userId)
-        .eq("task_date", localToday)
+        .eq("task_date", taskDate)
         .maybeSingle();
 
-      return { task: todayTask };
+      return { task: datedTask };
     }
 
     return { task: null, error: insertError.message };

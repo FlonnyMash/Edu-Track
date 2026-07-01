@@ -9,6 +9,8 @@ import {
 } from "@/lib/ai/evaluate-progress";
 import { parseLearningMaterials } from "@/lib/profiles/learning-materials";
 import {
+  appendMasteredTopicId,
+  extractUnitIdFromTaskMetadata,
   getUserProgress,
   upsertUserProgress,
 } from "@/lib/progress/user-progress";
@@ -152,6 +154,7 @@ export async function completeTask(
 
   const currentProgress = await getUserProgress(userId);
   const learningMaterials = parseLearningMaterials(profile?.learning_material);
+  const unitId = extractUnitIdFromTaskMetadata(task.ai_metadata);
 
   const evaluation = await evaluateProgressAfterCompletion({
     taskTitle: task.title,
@@ -166,7 +169,22 @@ export async function completeTask(
     evaluation
   );
 
-  await upsertUserProgress(userId, updatedProgress);
+  const masteredTopics = unitId
+    ? appendMasteredTopicId(currentProgress.masteredTopics, unitId)
+    : currentProgress.masteredTopics;
+
+  if (!unitId) {
+    console.warn("[CompleteTask] No syllabus unit id in task metadata; mastered_topics unchanged", {
+      taskId,
+    });
+  }
+
+  const progressToSave = {
+    ...updatedProgress,
+    masteredTopics,
+  };
+
+  await upsertUserProgress(userId, progressToSave);
 
   await supabase.from("activity_logs").insert({
     user_id: userId,
@@ -175,8 +193,9 @@ export async function completeTask(
       task_id: taskId,
       action: evaluation.action,
       previous_chapter: currentProgress.chapter,
-      new_chapter: updatedProgress.chapter,
-      mastered_topics: updatedProgress.masteredTopics,
+      new_chapter: progressToSave.chapter,
+      next_topic_id: unitId,
+      mastered_topics: progressToSave.masteredTopics,
     },
   });
 
@@ -186,7 +205,7 @@ export async function completeTask(
     coinsAwarded,
     task: { ...task, status: "completed" as const },
     progressionUpdate: {
-      chapter: updatedProgress.chapter,
+      chapter: progressToSave.chapter,
       action: evaluation.action,
     },
   };

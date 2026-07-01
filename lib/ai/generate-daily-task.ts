@@ -15,6 +15,12 @@ import type { CurrentProgress } from "./prompts";
 import { getGlossaryContext } from "@/lib/glossary/get-glossary-context";
 import { parseLearningMaterials } from "@/lib/profiles/learning-materials";
 import { buildProgressContext } from "@/lib/progress/user-progress";
+import {
+  resolveSyllabusProgress,
+  sanitizeProgressForSyllabus,
+  formatUnitCharacterList,
+  type SyllabusProgress,
+} from "./syllabus";
 import { createClient } from "@/lib/supabase/server";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
@@ -58,8 +64,8 @@ const JAPANESE_FALLBACK_TASKS: Record<
       "**Application**\nOn [TERM:genkouyoushi], write each character 5× with correct stroke order (mandatory handwriting). Then Genki I Workbook p. 11, exercises 1–3 only.\n\n" +
       "**Playful Learning**\nWatch a hiragana stroke-order video for あ–こ. Pause after each character and mimic the motion on paper — sync audio with your hand.\n\n" +
       "**Methodology**\nTextbook first builds sound–shape links; Workbook p. 11+ reinforces recall; the video adds motor memory without rushing ahead.\n\n" +
-      "# SIDE QUEST\n**Review**\nFirst session — no prior rows to review yet. Quickly read あ, い, う, え, お aloud once to warm up.\n\n" +
-      "**Application**\nSay each A-row sound once while pointing at the matching character.",
+      "# SIDE QUEST\n**Review**\nSet up your study space and print a [TERM:genkouyoushi] sheet. Locate the kana chart in your material.\n\n" +
+      "**Application**\nOpen your material to the first kana page and read the chart title aloud. Learn how stroke order helps with character formation.",
     estimated_minutes: 28,
   },
   2: {
@@ -147,9 +153,88 @@ function clampSessionMinutes(minutes: number): number {
   return Math.min(35, Math.max(20, Math.round(minutes)));
 }
 
+/** Deterministic Japanese fallback built from the pre-computed syllabus topic. */
+function buildSyllabusFallbackTask(
+  dayNumber: number,
+  progress: SyllabusProgress
+): {
+  title: string;
+  instructions: string;
+  estimated_minutes: number;
+  difficulty_level: number;
+  rationale: string;
+} {
+  if (progress.isCurriculumComplete) {
+    const reviewList = progress.reviewItems.join(", ");
+    return {
+      title: `Day ${dayNumber}: Mastery Consolidation Day`,
+      instructions:
+        "# MAIN QUEST\n## Mastery Consolidation Day\n\n" +
+        "Comprehensive review of all [TERM:hiragana], [TERM:katakana], and greetings learned so far.\n\n" +
+        "**Theory** (max 10 min)\nSkim your notes and kana charts. Read aloud a mixed sample of characters and greetings.\n\n" +
+        "**Application**\nOn [TERM:genkouyoushi], write 10 characters and 3 greetings from memory. Check against your material.\n\n" +
+        "**Playful Learning**\nListen to a hiragana/katakana song or use Forvo to rehear greetings — repeat each aloud.\n\n" +
+        "**Methodology**\nMixed review locks in long-term recall before advancing to future grammar content.\n\n" +
+        `# SIDE QUEST\n**Review**\nQuickly write or read these items from memory: ${reviewList}.\n\n` +
+        "**Application**\nRead the reviewed items aloud once, marking any that need another pass.",
+      estimated_minutes: 30,
+      difficulty_level: Math.min(dayNumber, 10),
+      rationale:
+        "Curriculum-complete consolidation fallback generated when AI is unavailable",
+    };
+  }
+
+  const { nextTopic } = progress;
+  const characterList = formatUnitCharacterList(nextTopic);
+
+  const scriptTerm = nextTopic.id.startsWith("katakana")
+    ? "[TERM:katakana]"
+    : nextTopic.type === "vocabulary"
+      ? "Genki I greetings"
+      : "[TERM:hiragana]";
+
+  const focusLine =
+    nextTopic.type === "vocabulary"
+      ? `Today we focus on ${nextTopic.title}.`
+      : `Today we focus on the ${nextTopic.title} of ${scriptTerm}.`;
+
+  const sideQuest =
+    progress.reviewItems.length === 0
+      ? "# SIDE QUEST\n**Review**\nSet up your study space and print a [TERM:genkouyoushi] sheet. Locate the kana chart in your material.\n\n" +
+        "**Application**\nOpen your material to the first kana page and read the chart title aloud."
+      : `# SIDE QUEST\n**Review**\nQuickly write or read these items from memory: ${progress.reviewItems.join(", ")}.\n\n` +
+        "**Application**\nRead the reviewed items aloud once, marking any that need another pass.";
+
+  const applicationLine =
+    nextTopic.type === "vocabulary"
+      ? "**Application**\nPractice each greeting aloud 3×. Write each word once on [TERM:genkouyoushi].\n\n"
+      : "**Application**\nOn [TERM:genkouyoushi], write each character 5× following the stroke order shown in your material (mandatory handwriting).\n\n";
+
+  const playfulLine =
+    nextTopic.type === "vocabulary"
+      ? "**Playful Learning**\nUse Forvo to hear native pronunciation of each greeting — repeat each twice after listening.\n\n"
+      : "**Playful Learning**\nWatch a stroke-order video for these characters. Pause after each and mimic the motion on paper.\n\n";
+
+  return {
+    title: `Day ${dayNumber}: ${nextTopic.title}`,
+    instructions:
+      `# MAIN QUEST\n## ${nextTopic.title}\n\n${focusLine}\n\n` +
+      "**Theory** (max 10 min)\nRead each item aloud twice.\n\n" +
+      `${characterList}\n\n` +
+      applicationLine +
+      playfulLine +
+      "**Methodology**\nReading, then practice, then a visual or audio aid builds sound, shape, and recall without rushing ahead.\n\n" +
+      sideQuest,
+    estimated_minutes: 28,
+    difficulty_level: Math.min(dayNumber, 10),
+    rationale: "Syllabus-aligned fallback task generated when AI is unavailable",
+  };
+}
+
 function buildFallbackTask(
   topic: string,
-  dayNumber: number
+  dayNumber: number,
+  syllabusProgress?: SyllabusProgress
 ): {
   title: string;
   instructions: string;
@@ -160,6 +245,10 @@ function buildFallbackTask(
   const normalizedTopic = topic.toLowerCase();
   const isJapanese =
     normalizedTopic.includes("japanese") || normalizedTopic.includes("日本語");
+
+  if (isJapanese && syllabusProgress) {
+    return buildSyllabusFallbackTask(dayNumber, syllabusProgress);
+  }
 
   if (isJapanese) {
     const fallback = getJapaneseFallbackTask(dayNumber);
@@ -191,14 +280,36 @@ function buildFallbackTask(
 function normalizeParsedSession(
   parsed: ReturnType<typeof parseTwoPartSession>,
   topic: string,
-  dayNumber: number
+  dayNumber: number,
+  syllabusProgress: SyllabusProgress
 ): AiTaskResponse {
+  const deterministicTitle = syllabusProgress.isCurriculumComplete
+    ? `Day ${dayNumber}: Mastery Consolidation Day`
+    : `Day ${dayNumber}: ${syllabusProgress.nextTopic.title}`;
+
   return {
-    title: parsed.title,
+    title: deterministicTitle,
     instructions: parsed.humanReadable,
     estimated_minutes: clampSessionMinutes(parsed.metadata.estimated_duration),
     difficulty_level: Math.min(dayNumber, 10),
     rationale: `AI-generated Day ${dayNumber} task for ${topic}`,
+  };
+}
+
+function buildDeterministicSessionMetadata(
+  parsed: ReturnType<typeof parseTwoPartSession>,
+  syllabusProgress: SyllabusProgress
+) {
+  const deterministicTopic = syllabusProgress.isCurriculumComplete
+    ? "Mastery Consolidation Day"
+    : syllabusProgress.nextTopic.title;
+
+  return {
+    ...parsed.metadata,
+    topic: deterministicTopic,
+    chapter: deterministicTopic,
+    nextTopicId: syllabusProgress.nextTopic.id,
+    next_recommended_action: "advance" as const,
   };
 }
 
@@ -232,10 +343,31 @@ export async function generateMvpDailyTask(
       fetchActiveLearningMaterial(userId),
     ]);
 
-  const isFreshStart =
-    progressContext.currentDay === 1 &&
-    progressContext.previouslyLearnedTerms.length === 0 &&
-    progressContext.recentPerformance.completedTaskCount === 0;
+  const sessionsCount = progressContext.recentPerformance.completedTaskCount;
+  const syllabusInput =
+    sessionsCount === 0 ? sanitizeProgressForSyllabus(progressContext) : progressContext;
+
+  if (sessionsCount === 0) {
+    console.log("[GenerateDailyTask] Sanitized progress for fresh start", {
+      sessionsCount,
+      rawMasteredTopicsCount: progressContext.masteredTopics.length,
+    });
+  }
+
+  const syllabusProgress = resolveSyllabusProgress(syllabusInput);
+
+  console.log("[GenerateDailyTask] Syllabus handoff:", {
+    dayNumber,
+    sessionsCount,
+    rawMasteredTopicsCount: progressContext.masteredTopics.length,
+    effectiveMasteredTopicsCount: syllabusInput.masteredTopics.length,
+    nextTopicId: syllabusProgress.nextTopic.id,
+    nextTopicTitle: syllabusProgress.nextTopic.title,
+    reviewItemCount: syllabusProgress.reviewItems.length,
+    isFreshStart: syllabusProgress.isFreshStart,
+  });
+
+  const isFreshStart = syllabusProgress.isFreshStart;
 
   try {
     const response = await fetch(OPENAI_CHAT_URL, {
@@ -252,13 +384,14 @@ export async function generateMvpDailyTask(
             content: getDailyTaskPrompt(
               activeMaterial,
               materials,
-              progressContext,
-              glossaryEntries
+              syllabusInput,
+              glossaryEntries,
+              syllabusProgress
             ),
           },
           {
             role: "user",
-            content: buildMvpUserPrompt(topic, progressContext),
+            content: buildMvpUserPrompt(topic, syllabusInput, syllabusProgress),
           },
         ],
       }),
@@ -279,7 +412,19 @@ export async function generateMvpDailyTask(
     }
 
     const parsed = parseTwoPartSession(content, dayNumber);
-    const task = normalizeParsedSession(parsed, topic, dayNumber);
+    const sessionMetadata = buildDeterministicSessionMetadata(
+      parsed,
+      syllabusProgress
+    );
+    const task = normalizeParsedSession(
+      parsed,
+      topic,
+      dayNumber,
+      syllabusProgress
+    );
+    const deterministicTopic = syllabusProgress.isCurriculumComplete
+      ? "Mastery Consolidation Day"
+      : syllabusProgress.nextTopic.title;
 
     return {
       task,
@@ -287,34 +432,66 @@ export async function generateMvpDailyTask(
         model: AI_MODEL,
         prompt_version: PROMPT_VERSION,
         active_material: activeMaterial || null,
-        topic: parsed.metadata.topic,
+        topic: deterministicTopic,
         day_number: dayNumber,
-        progress_context: progressContext,
+        progress_context: syllabusInput,
         progress_source: isFreshStart ? "default_day_1" : "user_history",
         current_progress: {
-          chapter: progressContext.currentChapter,
-          masteredTopics: progressContext.masteredTopics,
+          chapter: syllabusInput.currentChapter,
+          masteredTopics: syllabusInput.masteredTopics,
         } satisfies CurrentProgress,
         recommend_progression: {
-          chapter: parsed.metadata.chapter,
-          action: parsed.metadata.next_recommended_action,
+          chapter: deterministicTopic,
+          action: "advance",
         },
-        session_metadata: parsed.metadata,
+        syllabus_progress: {
+          next_topic_id: syllabusProgress.nextTopic.id,
+          next_topic_title: syllabusProgress.nextTopic.title,
+          review_items: syllabusProgress.reviewItems,
+          completed_unit_ids: syllabusProgress.completedUnitIds,
+          is_curriculum_complete: syllabusProgress.isCurriculumComplete,
+        },
+        session_metadata: sessionMetadata,
         generated_at: new Date().toISOString(),
       },
     };
   } catch (error) {
     console.error("AI MVP task generation failed:", error);
-    const fallback = buildFallbackTask(topic, dayNumber);
+    const fallback = buildFallbackTask(topic, dayNumber, syllabusProgress);
+    const deterministicTopic = syllabusProgress.isCurriculumComplete
+      ? "Mastery Consolidation Day"
+      : syllabusProgress.nextTopic.title;
+
     return {
       task: fallback,
       metadata: {
         model: "fallback",
         prompt_version: PROMPT_VERSION,
-        topic,
+        topic: deterministicTopic,
         day_number: dayNumber,
-        progress_context: progressContext,
+        progress_context: syllabusInput,
         progress_source: isFreshStart ? "default_day_1" : "user_history",
+        current_progress: {
+          chapter: syllabusInput.currentChapter,
+          masteredTopics: syllabusInput.masteredTopics,
+        } satisfies CurrentProgress,
+        recommend_progression: {
+          chapter: deterministicTopic,
+          action: "advance",
+        },
+        syllabus_progress: {
+          next_topic_id: syllabusProgress.nextTopic.id,
+          next_topic_title: syllabusProgress.nextTopic.title,
+          review_items: syllabusProgress.reviewItems,
+          completed_unit_ids: syllabusProgress.completedUnitIds,
+          is_curriculum_complete: syllabusProgress.isCurriculumComplete,
+        },
+        session_metadata: {
+          topic: deterministicTopic,
+          chapter: deterministicTopic,
+          nextTopicId: syllabusProgress.nextTopic.id,
+          next_recommended_action: "advance",
+        },
         generated_at: new Date().toISOString(),
         error: error instanceof Error ? error.message : "Unknown error",
       },

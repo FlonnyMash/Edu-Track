@@ -6,6 +6,20 @@ function assertNoError(error: { message: string } | null, context: string) {
   }
 }
 
+async function resetUserProgress(userId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("user_progress").upsert(
+    {
+      user_id: userId,
+      current_chapter: "Hiragana",
+      mastered_topics: [],
+    },
+    { onConflict: "user_id" }
+  );
+
+  assertNoError(error, "Failed to reset user progress");
+}
+
 export async function softResetUserData(userId: string): Promise<void> {
   const supabase = await createClient();
 
@@ -31,6 +45,8 @@ export async function softResetUserData(userId: string): Promise<void> {
     .delete()
     .eq("user_id", userId);
   assertNoError(tasksError, "Failed to delete daily tasks");
+
+  await resetUserProgress(userId);
 
   const { error: trackError } = await supabase
     .from("learning_tracks")
@@ -76,11 +92,19 @@ export async function hardResetUserData(userId: string): Promise<void> {
     .eq("user_id", userId);
   assertNoError(logsError, "Failed to delete activity logs");
 
+  const { error: tasksError } = await supabase
+    .from("daily_tasks")
+    .delete()
+    .eq("user_id", userId);
+  assertNoError(tasksError, "Failed to delete daily tasks");
+
   const { error: sessionsError } = await supabase
     .from("study_sessions")
     .delete()
     .eq("user_id", userId);
   assertNoError(sessionsError, "Failed to delete study sessions");
+
+  await resetUserProgress(userId);
 
   const { error: trackError } = await supabase
     .from("learning_tracks")

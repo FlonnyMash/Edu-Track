@@ -1,5 +1,6 @@
 import { getOpenAIApiKey, AI_MODEL } from "./client";
 import type { CurrentProgress } from "./prompts";
+import { extractMainQuestContent } from "@/lib/tasks/parser";
 import {
   progressionEvaluationSchema,
   type ProgressionEvaluation,
@@ -40,6 +41,8 @@ function buildEvaluationPrompt(
       ? learningMaterials.join(", ")
       : "unspecified materials";
 
+  const mainQuestContent = extractMainQuestContent(taskInstructions);
+
   return [
     "You evaluate whether a Japanese learner should advance in their curriculum.",
     "",
@@ -48,8 +51,10 @@ function buildEvaluationPrompt(
     `Mastered topics: ${currentProgress.masteredTopics.join(", ") || "none yet"}`,
     "",
     `Completed task title: ${taskTitle}`,
-    `Task content: ${taskInstructions.slice(0, 1500)}`,
+    `Task content (# MAIN QUEST only — SIDE QUEST excluded): ${mainQuestContent.slice(0, 1500)}`,
     `User reflection: ${reflectionNotes?.trim() || "No reflection provided."}`,
+    "",
+    "SIDE QUEST content is excluded from evaluation — do not mark reviewed-only items as newly mastered.",
     "",
     "Decide the next progression step:",
     "- advance: user clearly mastered today's content; move to the next logical chapter/lesson.",
@@ -128,17 +133,13 @@ export function applyProgressionEvaluation(
   current: CurrentProgress,
   evaluation: ProgressionEvaluation
 ): CurrentProgress {
-  const mergedTopics = [
-    ...new Set([...current.masteredTopics, ...evaluation.masteredTopics]),
-  ];
-
   if (evaluation.action === "advance") {
-    return { chapter: evaluation.chapter, masteredTopics: mergedTopics };
+    return { chapter: evaluation.chapter, masteredTopics: current.masteredTopics };
   }
 
   if (evaluation.action === "review") {
-    return { chapter: evaluation.chapter, masteredTopics: mergedTopics };
+    return { chapter: evaluation.chapter, masteredTopics: current.masteredTopics };
   }
 
-  return { chapter: current.chapter, masteredTopics: mergedTopics };
+  return { chapter: current.chapter, masteredTopics: current.masteredTopics };
 }

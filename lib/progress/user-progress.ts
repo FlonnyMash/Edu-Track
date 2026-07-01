@@ -4,7 +4,7 @@ import type {
   RecentPerformance,
   TaskHistoryEntry,
 } from "@/lib/ai/prompts";
-import { extractUniqueTaskTerms } from "@/lib/tasks/parser";
+import { extractUniqueTaskTerms, extractMainQuestContent } from "@/lib/tasks/parser";
 import { createClient } from "@/lib/supabase/server";
 
 export const DEFAULT_PROGRESS: CurrentProgress = {
@@ -69,6 +69,41 @@ function extractTopicFromMetadata(metadata: unknown): string | null {
   return null;
 }
 
+/** Strict syllabus unit id from task ai_metadata (never a display title). */
+export function extractUnitIdFromTaskMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+
+  const syllabusProgress = record.syllabus_progress;
+  if (syllabusProgress && typeof syllabusProgress === "object") {
+    const nextTopicId = (syllabusProgress as Record<string, unknown>).next_topic_id;
+    if (typeof nextTopicId === "string" && nextTopicId.trim()) {
+      return nextTopicId.trim();
+    }
+  }
+
+  const sessionMeta = record.session_metadata;
+  if (sessionMeta && typeof sessionMeta === "object") {
+    const nextTopicId = (sessionMeta as Record<string, unknown>).nextTopicId;
+    if (typeof nextTopicId === "string" && nextTopicId.trim()) {
+      return nextTopicId.trim();
+    }
+  }
+
+  return null;
+}
+
+export function appendMasteredTopicId(
+  masteredTopics: string[],
+  unitId: string
+): string[] {
+  const trimmedId = unitId.trim();
+  if (!trimmedId || masteredTopics.includes(trimmedId)) {
+    return masteredTopics;
+  }
+  return [...masteredTopics, trimmedId];
+}
+
 function extractActionFromMetadata(metadata: unknown): "advance" | "stay" | "review" | null {
   if (!metadata || typeof metadata !== "object") return null;
   const record = metadata as Record<string, unknown>;
@@ -111,7 +146,8 @@ function buildPreviouslyLearnedTerms(
   }
 
   for (const row of completedRows) {
-    for (const term of extractUniqueTaskTerms(row.instructions)) {
+    const mainQuestText = extractMainQuestContent(row.instructions);
+    for (const term of extractUniqueTaskTerms(mainQuestText)) {
       terms.add(term.toLowerCase());
     }
 
@@ -122,7 +158,8 @@ function buildPreviouslyLearnedTerms(
   }
 
   for (const entry of history) {
-    for (const term of extractUniqueTaskTerms(entry.instructions)) {
+    const mainQuestText = extractMainQuestContent(entry.instructions);
+    for (const term of extractUniqueTaskTerms(mainQuestText)) {
       terms.add(term.toLowerCase());
     }
   }
@@ -229,7 +266,7 @@ export async function buildProgressContext(
     averageDifficulty,
   };
 
-  if (completedCount === 0 && previouslyLearnedTerms.length === 0) {
+  if (completedCount === 0) {
     return {
       ...DEFAULT_PROGRESS_CONTEXT,
       currentDay,

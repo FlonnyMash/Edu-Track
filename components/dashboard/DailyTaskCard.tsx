@@ -88,6 +88,8 @@ export function DailyTaskCard({
   const [localCompleted, setLocalCompleted] = useState(initiallyCompleted);
   const [showXpBurst, setShowXpBurst] = useState(false);
   const [buttonBounce, setButtonBounce] = useState(false);
+  const [cardBounce, setCardBounce] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
 
   const isCompleted = completed ?? localCompleted;
   const displayEyebrow = eyebrow ?? "Today's Task";
@@ -105,27 +107,40 @@ export function DailyTaskCard({
     if (isCompleted) return;
 
     setButtonBounce(true);
+    setCardBounce(true);
+    setJustCompleted(true);
     if (completed == null) {
       setLocalCompleted(true);
     }
     setShowXpBurst(true);
 
     setTimeout(() => setButtonBounce(false), 400);
+    setTimeout(() => setCardBounce(false), 400);
+    setTimeout(() => setJustCompleted(false), 600);
     setTimeout(() => setShowXpBurst(false), 1200);
 
     onComplete?.();
   }
 
+  const dimmedComplete = dimmed && isCompleted;
+
   return (
     <motion.div
       className={cn(
         "relative transition-all duration-500 ease-out",
-        dimmed && "pointer-events-none opacity-55 grayscale-[0.45]",
-        isCompleted && !dimmed && "ring-1 ring-white/10"
+        dimmedComplete && "pointer-events-none opacity-60"
       )}
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
+      animate={
+        cardBounce
+          ? { opacity: 1, y: 0, scale: [1, 1.03, 0.98, 1] }
+          : { opacity: 1, y: 0, scale: 1 }
+      }
+      transition={
+        cardBounce
+          ? { duration: 0.4, ease: "easeOut" }
+          : { duration: 0.4 }
+      }
     >
       {isCompleted && (
         <motion.div
@@ -150,9 +165,18 @@ export function DailyTaskCard({
 
       <Card
         className={cn(
-          "shadow-[0_8px_0_0_rgba(0,0,0,0.25)]",
+          "shadow-[0_8px_0_0_rgba(0,0,0,0.25)] transition-[border-color,box-shadow] duration-300",
           variant === "side" && "scale-[0.98]",
-          style.card
+          style.card,
+          justCompleted &&
+            (variant === "main"
+              ? "!border-city-teal shadow-[0_0_24px_rgba(61,219,207,0.6)]"
+              : "!border-yellow-400 shadow-[0_0_24px_rgba(250,204,21,0.5)]"),
+          dimmedComplete &&
+            !justCompleted &&
+            (variant === "main"
+              ? "!border-city-teal/60 shadow-[0_0_20px_rgba(61,219,207,0.25)]"
+              : "!border-yellow-400/60 shadow-[0_0_20px_rgba(250,204,21,0.2)]")
         )}
       >
         <CardHeader className="p-4 sm:p-6">
@@ -220,9 +244,10 @@ export function DailyTaskCard({
                   "flex h-14 w-full items-center justify-center gap-3 rounded-xl",
                   "border-2 text-base font-bold sm:text-lg",
                   style.button,
-                  "transition-colors duration-300",
+                  "outline-none transition-colors duration-300",
                   "hover:brightness-110",
-                  "active:translate-y-1 active:scale-[0.98]"
+                  "active:translate-y-1 active:scale-[0.98]",
+                  "focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-offset-2 focus-visible:ring-offset-city-navy"
                 )}
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-current/40 bg-black/10">

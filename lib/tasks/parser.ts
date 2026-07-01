@@ -115,6 +115,13 @@ export function splitQuests(rawText: string | null | undefined): SplitQuestsResu
   };
 }
 
+/** Returns only the # MAIN QUEST body (excludes # SIDE QUEST). */
+export function extractMainQuestContent(
+  raw: string | null | undefined
+): string {
+  return splitQuests(raw).mainQuestText;
+}
+
 function extractQuestTitleAndBody(text: string): { title: string; body: string } {
   const trimmed = text.trim();
   if (!trimmed) {

@@ -1,5 +1,7 @@
 import type { LearningTrack } from "@/types/database";
 import type { GlossaryEntry } from "@/lib/glossary/types";
+import type { SyllabusProgress } from "./syllabus";
+import { formatUnitCharacterList } from "./syllabus";
 export interface CurrentProgress {
   chapter: string;
   masteredTopics: string[];
@@ -87,9 +89,8 @@ const SUPPLEMENTARY_MATERIALS: Record<string, string> = {
 
 const MATERIAL_CURRICULUM_HINTS: Record<string, string> = {
   "Genki 1":
-    "Follow Genki I (3rd ed.) lesson order: hiragana → katakana → Lessons 1–12. " +
-    "Each task must cite a specific lesson, page range, or grammar point from Genki I only. " +
-    "Theory sections draw from the main textbook only.",
+    "Use Genki I (3rd ed.) page references only for the pre-assigned syllabus topic. " +
+    "Do NOT advance to Lessons 1–12 or other rows unless they are the assigned topic in the CURRICULUM ASSIGNMENT block.",
   "Genki 1 Workbook":
     "Follow Genki I Workbook exercise sets that mirror the main textbook lessons. " +
     "Never assign workbook pages ahead of the corresponding textbook lesson. " +
@@ -103,65 +104,63 @@ const MATERIAL_CURRICULUM_HINTS: Record<string, string> = {
     "Reference the unit/skill name; do not invent units that do not exist in the tree.",
 };
 
-const KANA_ROW_PROGRESSION = [
-  "A-row (あ, い, う, え, お)",
-  "K-row (か, き, く, け, こ)",
-  "S-row (さ, し, す, せ, そ)",
-  "T-row (た, ち, つ, て, と)",
-  "N-row (な, に, ぬ, ね, の)",
-  "H-row (は, ひ, ふ, へ, ほ)",
-  "M-row (ま, み, む, め, も)",
-  "Y-row (や, ゆ, よ)",
-  "R-row (ら, り, る, れ, ろ)",
-  "W-row + ん (わ, を, ん)",
-].join(" → ");
+/**
+ * Injects the pre-computed curriculum assignment so the LLM never has to
+ * infer the next topic. Progression is resolved deterministically in code.
+ */
+function buildCurriculumAssignmentBlock(progress: SyllabusProgress): string {
+  const mainItems = formatUnitCharacterList(progress.nextTopic);
+  const { nextTopic } = progress;
 
-const KANA_ROW_HINTS: Array<{ pattern: RegExp; nextRow: string }> = [
-  { pattern: /k-row|か|き|く|け|こ/i, nextRow: "S-row (さ, し, す, せ, そ)" },
-  { pattern: /s-row|さ|し|す|せ|そ/i, nextRow: "T-row (た, ち, つ, て, と)" },
-  { pattern: /t-row|た|ち|つ|て|と/i, nextRow: "N-row (な, に, ぬ, ね, の)" },
-  { pattern: /n-row|な|に|ぬ|ね|の/i, nextRow: "H-row (は, ひ, ふ, へ, ほ)" },
-  { pattern: /h-row|は|ひ|ふ|へ|ほ/i, nextRow: "M-row (ま, み, む, め, も)" },
-  { pattern: /m-row|ま|み|む|め|も/i, nextRow: "Y-row (や, ゆ, よ)" },
-  { pattern: /y-row|や|ゆ|よ/i, nextRow: "R-row (ら, り, る, れ, ろ)" },
-  { pattern: /r-row|ら|り|る|れ|ろ/i, nextRow: "W-row + ん (わ, を, ん)" },
-  { pattern: /a-row|あ|い|う|え|お/i, nextRow: "K-row (か, き, く, け, こ)" },
-];
+  const lines = [
+    "═══ CURRICULUM ASSIGNMENT (PRE-COMPUTED — HIGHEST PRIORITY) ═══",
+    "Progression is decided in code. You are a content writer ONLY — do NOT choose topics.",
+    `Your # MAIN QUEST MUST EXACTLY teach this topic: ${nextTopic.title}`,
+    `and these items: ${nextTopic.items.join(", ")}`,
+    "Use the strict Character | Pronunciation list format for these items in **Theory**:",
+    mainItems,
+    "Do NOT teach any other topic, lesson, row, or vocabulary.",
+    "Do NOT reference Genki Lesson 1 unless it is the assigned topic above.",
+    "",
+  ];
 
-function isFreshStart(progressContext: ProgressContext): boolean {
-  return (
-    progressContext.currentDay === 1 &&
-    progressContext.previouslyLearnedTerms.length === 0
-  );
-}
-
-function buildDayOneBlock(progressContext: ProgressContext): string | null {
-  if (!isFreshStart(progressContext)) return null;
-
-  return [
-    "═══ DAY 1 / EMPTY STATE (CRITICAL) ═══",
-    "CRITICAL: If the previouslyLearnedTerms context is completely empty (i.e., it is Day 1),",
-    "you MUST start at the very beginning of the syllabus (e.g., the A-row: あ, い, う, え, お).",
-    "Do NOT skip ahead to the K-row or any later row.",
-    "Previous mentions of the K-row or other rows elsewhere in these instructions were merely examples",
-    "for users who have already completed earlier rows — they do NOT apply on Day 1.",
-    "Today's MAIN QUEST new-learning focus MUST be the A-row only (or the equivalent opening",
-    "unit of the user's selected material).",
-  ].join("\n");
-}
-function inferNextKanaRowHint(progressContext: ProgressContext): string | null {
-  if (isFreshStart(progressContext)) return null;
-
-  const lastTitle = progressContext.recentPerformance.recentTitles[0];
-  if (!lastTitle) return null;
-
-  for (const { pattern, nextRow } of KANA_ROW_HINTS) {
-    if (pattern.test(lastTitle)) {
-      return `- Recent session title suggests prior row coverage — today's NEW focus should be ${nextRow}.`;
-    }
+  if (progress.reviewItems.length === 0) {
+    lines.push(
+      "CRITICAL: The user has NO review items yet. For the `# SIDE QUEST`, DO NOT generate character reviews.",
+      "Instead, give them a generic preparation task (e.g., set up a notebook, explain stroke order).",
+      "Your # SIDE QUEST is a generic PREPARATION task (not spaced repetition):",
+      "instruct study-environment setup, printing a [TERM:genkouyoushi] sheet,",
+      "and locating the kana chart in the user's material."
+    );
+  } else {
+    lines.push(
+      `For the # SIDE QUEST, you MUST EXACTLY review these items: ${progress.reviewItems.join(", ")}.`,
+      "Do NOT add, remove, or substitute any item.",
+      "List each item using the strict Character | Pronunciation format."
+    );
   }
 
-  return null;
+  return lines.join("\n");
+}
+
+function buildCurriculumCompleteBlock(progress: SyllabusProgress): string {
+  const reviewList = progress.reviewItems.join(", ");
+
+  return [
+    "═══ CURRICULUM COMPLETE — MASTERY CONSOLIDATION DAY (HIGHEST PRIORITY) ═══",
+    "The user has mastered all current MVP syllabus content (Hiragana, Katakana, Genki I greetings).",
+    "Do NOT introduce new material.",
+    "",
+    "Your # MAIN QUEST MUST be titled Mastery Consolidation Day.",
+    "Provide a comprehensive review combining all Hiragana, Katakana, and greetings learned.",
+    "Include broad practice: mixed writing, reading aloud, and a short self-check.",
+    "Use the strict Word/Character | Pronunciation format for any listed items.",
+    "",
+    "Your # SIDE QUEST MUST review ONLY these pre-selected items (60% spaced repetition sample):",
+    `  ${reviewList}`,
+    "List each item using the strict Word/Character | Pronunciation format.",
+    "Do NOT introduce new concepts in the # SIDE QUEST.",
+  ].join("\n");
 }
 
 function curriculumHintFor(material: string): string {
@@ -201,10 +200,9 @@ function buildProgressionBlock(
       : "none yet";
 
   lines.push(
-    "- previouslyLearnedTerms is authoritative: " + learnedTerms + ".",
-    "- Plan the NEXT step beyond these terms — never re-introduce them as new material.",
-    "- Use task history in the user message to infer pacing; if history is empty and",
-    "  currentDay is 1, start at the true beginning of the curriculum."
+    "- previouslyLearnedTerms (background only — do NOT use for curriculum decisions): " +
+      learnedTerms + ".",
+    "- Today's topic and review items are fixed in the CURRICULUM ASSIGNMENT block — write content for those only."
   );
 
   for (const material of materials) {
@@ -242,11 +240,6 @@ function buildLearnerStateBlock(progressContext: ProgressContext): string {
       ? progressContext.previouslyLearnedTerms.join(", ")
       : "none — Day 1 start";
 
-  const masteredList =
-    progressContext.masteredTopics.length > 0
-      ? progressContext.masteredTopics.join(", ")
-      : "none recorded yet";
-
   const actionsList =
     recentPerformance.recentActions.length > 0
       ? recentPerformance.recentActions.join(", ")
@@ -270,9 +263,8 @@ function buildLearnerStateBlock(progressContext: ProgressContext): string {
   return [
     "── LEARNER STATE (authoritative) ──",
     `Current day: ${progressContext.currentDay}`,
-    `Current chapter: ${progressContext.currentChapter}`,
-    `Previously learned terms: ${learnedTermsList}`,
-    `Mastered topics: ${masteredList}`,
+    `Current chapter (informational only): ${progressContext.currentChapter}`,
+    `Previously learned terms (do NOT use for curriculum decisions): ${learnedTermsList}`,
     "Recent performance:",
     `  - Completed sessions: ${recentPerformance.completedTaskCount}`,
     `  - Recent progression signals: ${actionsList}`,
@@ -282,37 +274,18 @@ function buildLearnerStateBlock(progressContext: ProgressContext): string {
   ].join("\n");
 }
 
-function buildAntiRepeatBlock(progressContext: ProgressContext): string {
+function buildAntiRepeatBlock(): string {
   return [
     "── PROGRESSION RULES (strict) ──",
     "You are a Japanese learning guide. Do NOT repeat lessons.",
-    "Based on previouslyLearnedTerms, introduce the NEXT logical set of characters or grammar rules.",
-    "Never re-teach content the user has already covered in prior sessions.",
-    "If currentDay > 1 or previouslyLearnedTerms is non-empty, you MUST advance —",
-    "do not assign introductory あ–お hiragana content again unless explicitly reviewing.",
-    "- When teaching kana, treat each row as a single-day unit unless review is",
-    "  explicitly required (see KANA PACING block).",
+    "Today's new topic is fixed by the CURRICULUM ASSIGNMENT block above — teach exactly that.",
+    "Never re-teach content the user has already covered in prior sessions as NEW material.",
     "Maintain the strict quest structure: # MAIN QUEST for new learning and # SIDE QUEST for review.",
     "Continue using the [TERM:word] tagging system for important Japanese concepts.",
-    progressContext.currentDay === 1 &&
-    progressContext.previouslyLearnedTerms.length === 0
-      ? "- Day 1 fresh start: begin at the A-row (あ, い, う, え, お) — the very first step of the syllabus."
-      : "- This is NOT a first session — advance beyond all previouslyLearnedTerms.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
 }
 
-function buildReviewBlock(progressContext: ProgressContext): string {
-  const learnedTerms =
-    progressContext.previouslyLearnedTerms.length > 0
-      ? progressContext.previouslyLearnedTerms.join(", ")
-      : "none yet";
-
-  const isFreshStartDay =
-    progressContext.currentDay === 1 &&
-    progressContext.previouslyLearnedTerms.length === 0;
-
+function buildReviewBlock(progress: SyllabusProgress): string {
   return [
     "── REVIEW SECTION (mandatory — spaced repetition) ──",
     "The **Review** section belongs inside # SIDE QUEST in every session.",
@@ -320,10 +293,12 @@ function buildReviewBlock(progressContext: ProgressContext): string {
     "  # MAIN QUEST → ## [Topic Title] → **Theory** → **Application** → **Playful Learning** → **Methodology**",
     "  # SIDE QUEST → **Review** → **Application**",
     "",
-    ...(isFreshStartDay
+    ...(progress.reviewItems.length === 0
       ? [
-          "── DAY 1 SIDE QUEST (preparation — not review) ──",
-          "CRITICAL: If it is Day 1, instead of a review, the # SIDE QUEST must instruct the user on",
+          "── FRESH START SIDE QUEST (preparation — not review) ──",
+          "CRITICAL: The user has NO review items yet. For the `# SIDE QUEST`, DO NOT generate character reviews.",
+          "Instead, give them a generic preparation task (e.g., set up a notebook, explain stroke order).",
+          "There is nothing to review yet, so the # SIDE QUEST must instruct the user on",
           "preparation tasks (e.g., setting up their study environment, printing out a",
           "[TERM:genkouyoushi] sheet, or learning how to read a standard Kana chart).",
           "Do NOT write a hollow 'nothing to review yet' message — give concrete, useful prep steps.",
@@ -333,60 +308,16 @@ function buildReviewBlock(progressContext: ProgressContext): string {
         ]
       : [
           "Instructions for **Review**:",
-          "- Look at previouslyLearnedTerms: " + learnedTerms + ".",
-          "- Select a subset of these older characters/concepts and instruct the user to",
-          "  quickly write or recall them (e.g. \"Before writing the new S-row characters,",
-          '  quickly write the A-row and K-row once each").',
-          "- Do NOT introduce new concepts in Review — only reinforce prior material.",
+          `For the # SIDE QUEST, you MUST EXACTLY review these items: ${progress.reviewItems.join(", ")}.`,
+          "Do NOT add, remove, or substitute any item.",
+          "- Instruct the user to quickly write, read, or recall them before the new topic.",
+          "- List reviewed characters using the strict Character | Pronunciation format.",
+          "- Do NOT introduce new concepts in Review — only reinforce these items.",
           "- Keep Review brief (about 3–5 minutes).",
-          "- Every session after Day 1 MUST include concrete spaced-repetition practice",
-          "  drawn from previouslyLearnedTerms.",
         ]),
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-function buildKanaPacingBlock(progressContext: ProgressContext): string {
-  const scriptPhase =
-    progressContext.currentChapter.toLowerCase().includes("katakana")
-      ? "Katakana"
-      : "Hiragana";
-
-  const lines = [
-    "── KANA PACING (strict — no micro-stagnation) ──",
-    `Standard ${scriptPhase} row order (same sequence for Hiragana and Katakana):`,
-    `  ${KANA_ROW_PROGRESSION}`,
-    "",
-    "Rules:",
-  ];
-
-  if (isFreshStart(progressContext)) {
-    lines.push(
-      "- DAY 1 / empty previouslyLearnedTerms: today's NEW material MUST be the A-row",
-      "  (あ, い, う, え, お) only. Do NOT assign K-row or any later row.",
-      "- K-row/S-row examples below apply only after the user has completed prior rows."
-    );
-  }
-
-  lines.push(
-    "- If previouslyLearnedTerms or recent session titles indicate the user already",
-    "  practiced a specific row (e.g. A-row: a, i, u, e, o), today's NEW",
-    "  material MUST be the NEXT row in the sequence (e.g. K-row: ka, ki, ku, ke, ko).",
-    "- One row per session for new script learning — do not stretch the same row",
-    "  across multiple consecutive days.",
-    "- Only repeat the previous day's exact row if recent progression signals",
-    '  include "review" OR reflections clearly indicate the user struggled/failed.',
-    "- Brief review of prior rows (5 min max) is allowed, but today's focus must",
-    "  introduce the next row."
-  );
-
-  const rowHint = inferNextKanaRowHint(progressContext);
-  if (rowHint) {
-    lines.push(rowHint);
-  }
-
-  return lines.join("\n");
 }
 
 function buildNoVisualDescriptionsBlock(): string {
@@ -506,7 +437,8 @@ export function getDailyTaskPrompt(
   activeMaterial: string,
   materials: string[],
   progressContext: ProgressContext,
-  glossaryEntries: GlossaryEntry[] = []
+  glossaryEntries: GlossaryEntry[] = [],
+  syllabusProgress: SyllabusProgress
 ): string {
   const materialList =
     activeMaterial.trim() ||
@@ -520,41 +452,42 @@ export function getDailyTaskPrompt(
       : `  • ${curriculumHintFor("their chosen learning material")}`;
 
   const dayNumber = progressContext.currentDay;
-  const dayOneBlock = buildDayOneBlock(progressContext);
+  const assignmentBlock = syllabusProgress.isCurriculumComplete
+    ? buildCurriculumCompleteBlock(syllabusProgress)
+    : buildCurriculumAssignmentBlock(syllabusProgress);
+  const deterministicTopic = syllabusProgress.isCurriculumComplete
+    ? "Mastery Consolidation Day"
+    : syllabusProgress.nextTopic.title;
   const outputFormatBlock = buildOutputFormatBlock();
   const characterListBlock = buildCharacterListFormatBlock();
   const groundingBlock = buildMaterialGroundingBlock(activeMaterial);
   const progressionBlock = buildProgressionBlock(materials, progressContext);
   const learnerStateBlock = buildLearnerStateBlock(progressContext);
-  const antiRepeatBlock = buildAntiRepeatBlock(progressContext);
-  const kanaPacingBlock = buildKanaPacingBlock(progressContext);
+  const antiRepeatBlock = buildAntiRepeatBlock();
   const noVisualBlock = buildNoVisualDescriptionsBlock();
-  const reviewBlock = buildReviewBlock(progressContext);
+  const reviewBlock = buildReviewBlock(syllabusProgress);
   const handwritingBlock = buildHandwritingBlock(dayNumber);
   const glossaryBlock = buildGlossaryBlock(glossaryEntries);
 
   return [
     groundingBlock,
     "",
-    "Role: Expert AI Learning Architect & Tutor.",
-    "You are the primary driver of the user's Japanese learning journey.",
-    "Your sole job is to plan ONE comprehensive daily study session (20–35 minutes).",
+    "Role: Expert Japanese study session content writer.",
+    "You write motivating educational copy for ONE daily study session (20–35 minutes).",
+    "Curriculum is pre-assigned in the CURRICULUM ASSIGNMENT block — you do NOT decide topics or review items.",
     "You are not a chat companion — you output structured learning assignments only.",
+    "",
+    assignmentBlock,
     "",
     learnerStateBlock,
     "",
-    ...(dayOneBlock ? [dayOneBlock, ""] : []),
     antiRepeatBlock,
-    "",
-    kanaPacingBlock,
     "",
     noVisualBlock,
     "",
-    "- Based on learner state, determine the most logical next step in the curriculum.",
-    "- If prior tasks suggest mastery, proactively plan content that advances toward the next chapter.",
-    "- If recent progression signals include 'review' or reflections suggest struggle,",
-    "  plan consolidation before advancing.",
-    "- The user may override chapter in Settings — treat current chapter above as authoritative.",
+    "- Curriculum progression is pre-computed — follow the CURRICULUM ASSIGNMENT block exactly.",
+    "- Your job is to write great, motivating educational content for the assigned topic,",
+    "  not to decide what comes next.",
     "",
     "═══ LEARNING MATERIALS ═══",
     `User-selected materials: ${materialList}`,
@@ -583,7 +516,11 @@ export function getDailyTaskPrompt(
     "Part 1 MUST strictly begin with `# MAIN QUEST` — no text before it.",
     "Immediately under `# MAIN QUEST`, add `## [Topic Title]` then the section blocks.",
     "Do NOT include a Day title heading or unformatted progress line before `# MAIN QUEST`.",
-    "MAIN QUEST contains today's new learning only.",
+    ...(syllabusProgress.isCurriculumComplete
+      ? [
+          "MAIN QUEST is a Mastery Consolidation Day — comprehensive review only, no new material.",
+        ]
+      : ["MAIN QUEST contains today's new learning only."]),
     "Inside # MAIN QUEST, use these **bold** section headers in this exact order (after `##`):",
     "  **Theory** — material curriculum only; cap at 10 minutes of reading/study.",
     "  **Application** — practice from the selected material (workbook pages, exercises, or writing).",
@@ -595,20 +532,29 @@ export function getDailyTaskPrompt(
     "",
     "After MAIN QUEST, include exactly this H1 heading:",
     "# SIDE QUEST",
-    ...(isFreshStart(progressContext)
+    ...(syllabusProgress.isCurriculumComplete
       ? [
-          "On Day 1 (empty previouslyLearnedTerms), SIDE QUEST is for preparation tasks —",
-          "not spaced repetition. Instruct study-environment setup and kana-chart orientation.",
-          "Use **Review** for prep/setup steps and **Application** for a short prep drill.",
+          "Curriculum complete: SIDE QUEST continues spaced repetition from the full corpus.",
+          `Review ONLY these assigned items (${syllabusProgress.reviewItems.join(", ")}).`,
+          "List each using the strict Word/Character | Pronunciation format.",
+          "Inside # SIDE QUEST, use **Review** and **Application** section headers.",
         ]
-      : [
-          "SIDE QUEST is spaced repetition only. It must cover older concepts from",
-          "previouslyLearnedTerms and must not introduce new concepts.",
-          "Inside # SIDE QUEST, use these **bold** section headers in this exact order:",
-          "  **Review** — Select older characters/concepts from previouslyLearnedTerms.",
-          "    Instruct the user to quickly write, read, or recall them.",
-          "  **Application** — A short 3–5 minute review drill using only older material.",
-        ]),
+      : syllabusProgress.reviewItems.length === 0
+        ? [
+            "CRITICAL: The user has NO review items yet. For the `# SIDE QUEST`, DO NOT generate character reviews.",
+            "Instead, give them a generic preparation task (e.g., set up a notebook, explain stroke order).",
+            "Fresh start: SIDE QUEST is for preparation tasks — not spaced repetition.",
+            "Instruct study-environment setup and kana-chart orientation.",
+            "Use **Review** for prep/setup steps and **Application** for a short prep drill.",
+          ]
+        : [
+            `For the # SIDE QUEST, you MUST EXACTLY review these items: ${syllabusProgress.reviewItems.join(", ")}.`,
+            "Do NOT add, remove, or substitute any item.",
+            "Inside # SIDE QUEST, use these **bold** section headers in this exact order:",
+            "  **Review** — Have the user quickly write, read, or recall the assigned items,",
+            "    listed using the strict Character | Pronunciation format.",
+            "  **Application** — A short 3–5 minute review drill using only those items.",
+          ]),
     "You MUST generate BOTH # MAIN QUEST and # SIDE QUEST every time.",
     "",
     "── GLOSSARY TERM TAGS (mandatory in Part 1) ──",
@@ -642,9 +588,9 @@ export function getDailyTaskPrompt(
     "This block is for system tracking only — not shown to the user.",
     "Use exactly these keys:",
     '{ "topic": "...", "chapter": "...", "next_recommended_action": "advance|stay|review", "estimated_duration": 30 }',
-    "- topic: today's focus label",
-    "- chapter: target chapter after this session",
-    "- next_recommended_action: advance | stay | review",
+    `- topic: copy EXACTLY this value — "${deterministicTopic}"`,
+    `- chapter: copy EXACTLY this value — "${deterministicTopic}"`,
+    "- next_recommended_action: use advance (do not invent a different progression decision)",
     "- estimated_duration: integer 20–35 (total session minutes)",
     "",
     "── OUTPUT RULES ──",
@@ -666,7 +612,8 @@ export function getDailyTaskPrompt(
 /** User message for MVP daily task generation (day + goal + progress + history). */
 export function buildMvpUserPrompt(
   topic: string,
-  progressContext: ProgressContext
+  progressContext: ProgressContext,
+  syllabusProgress: SyllabusProgress
 ): string {
   const { currentDay, history } = progressContext;
 
@@ -683,22 +630,31 @@ export function buildMvpUserPrompt(
   const learnedTerms =
     progressContext.previouslyLearnedTerms.length > 0
       ? progressContext.previouslyLearnedTerms.join(", ")
-      : "none — Day 1 start";
+      : "none — fresh start";
+
+  const sideQuestLine = syllabusProgress.isCurriculumComplete
+    ? "Generate a Mastery Consolidation Day — no new syllabus topic."
+    : syllabusProgress.reviewItems.length === 0
+      ? "CRITICAL: The user has NO review items yet. SIDE QUEST is preparation only — DO NOT generate character reviews."
+      : `For the # SIDE QUEST, you MUST EXACTLY review these items: ${syllabusProgress.reviewItems.join(", ")}.`;
+
+  const mainQuestLine = syllabusProgress.isCurriculumComplete
+    ? "MAIN QUEST MUST be a Mastery Consolidation Day (comprehensive review, no new material)."
+    : `MAIN QUEST MUST EXACTLY teach this topic: ${syllabusProgress.nextTopic.title} and these items: ${syllabusProgress.nextTopic.items.join(", ")}.`;
 
   return [
     `Learning goal: ${topic}`,
     `Current day number: ${currentDay}`,
-    `Current chapter: ${progressContext.currentChapter}`,
-    `Mastered topics: ${progressContext.masteredTopics.join(", ") || "none yet"}`,
-    `Previously learned terms: ${learnedTerms}`,
+    `Current chapter (informational only): ${progressContext.currentChapter}`,
+    `Previously learned terms (do NOT use for curriculum decisions): ${learnedTerms}`,
     "",
     "Recent task history:",
     historyText,
     "",
     `Generate Day ${currentDay}'s comprehensive study session.`,
-    "Content MUST differ from all recent session titles and must advance beyond previouslyLearnedTerms.",
-    "When teaching kana, advance to the next row — do not repeat yesterday's row unless review is needed.",
-    "Always include # MAIN QUEST for new learning and # SIDE QUEST for spaced repetition review.",
+    mainQuestLine,
+    sideQuestLine,
+    "Always include # MAIN QUEST for new learning and # SIDE QUEST for review.",
     "MAIN QUEST sections: Theory, Application, Playful Learning, Methodology.",
     "SIDE QUEST sections: Review, Application.",
     "Output Part 1 (Markdown starting with # MAIN QUEST) then Part 2 (raw JSON metadata at the very end).",

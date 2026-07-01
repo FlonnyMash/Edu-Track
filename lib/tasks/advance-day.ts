@@ -29,6 +29,27 @@ export async function findAvailableArchiveDate(
   throw new Error("Could not find an open date to archive the current task");
 }
 
+export async function archiveDailyTask(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  task: Pick<DailyTask, "id" | "task_date">
+): Promise<void> {
+  const archiveDate = await findAvailableArchiveDate(
+    supabase,
+    userId,
+    task.task_date
+  );
+
+  const { error: shiftError } = await supabase
+    .from("daily_tasks")
+    .update({ task_date: archiveDate })
+    .eq("id", task.id);
+
+  if (shiftError) {
+    throw new Error(shiftError.message);
+  }
+}
+
 export async function archiveTodayTask(
   userId: string,
   localToday: string
@@ -37,7 +58,7 @@ export async function archiveTodayTask(
 
   const { data: taskToShift } = await supabase
     .from("daily_tasks")
-    .select("id")
+    .select("id, task_date")
     .eq("user_id", userId)
     .eq("task_date", localToday)
     .maybeSingle();
@@ -46,20 +67,44 @@ export async function archiveTodayTask(
     return;
   }
 
-  const archiveDate = await findAvailableArchiveDate(
-    supabase,
-    userId,
-    localToday
-  );
+  await archiveDailyTask(supabase, userId, taskToShift);
+}
 
-  const { error: shiftError } = await supabase
+async function resolveTaskToAdvance(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  localToday: string
+): Promise<DailyTask | null> {
+  const { data: todayDatedTask } = await supabase
     .from("daily_tasks")
-    .update({ task_date: archiveDate })
-    .eq("id", taskToShift.id);
+    .select("*")
+    .eq("user_id", userId)
+    .eq("task_date", localToday)
+    .maybeSingle();
 
-  if (shiftError) {
-    throw new Error(shiftError.message);
+  if (todayDatedTask) {
+    return todayDatedTask;
   }
+
+  const { count: completedCount } = await supabase
+    .from("daily_tasks")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "completed");
+
+  if (!completedCount || completedCount < 1) {
+    return null;
+  }
+
+  const { data: latestCompletedTask } = await supabase
+    .from("daily_tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_number", completedCount)
+    .eq("status", "completed")
+    .maybeSingle();
+
+  return latestCompletedTask;
 }
 
 export async function advanceToNextDayTask(
@@ -76,23 +121,18 @@ export async function advanceToNextDayTask(
   const timezone = profile?.timezone || "UTC";
   const localToday = getLocalDateString(timezone);
 
-  const { data: todayTask } = await supabase
-    .from("daily_tasks")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("task_date", localToday)
-    .maybeSingle();
+  const taskToAdvance = await resolveTaskToAdvance(supabase, userId, localToday);
 
-  if (!todayTask) {
+  if (!taskToAdvance) {
     return { task: null, error: "No task found for today" };
   }
 
-  if (todayTask.status !== "completed") {
+  if (taskToAdvance.status !== "completed") {
     return { task: null, error: "Complete today's lesson before advancing" };
   }
 
   try {
-    await archiveTodayTask(userId, localToday);
+    await archiveDailyTask(supabase, userId, taskToAdvance);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Could not archive today's task";
