@@ -2,8 +2,6 @@
 
 import { generateMvpDailyTask } from "@/lib/ai/generate-daily-task";
 import { cacheTaskGlossaryTerms } from "@/lib/glossary/cache-task-terms";
-import { getGlossaryContext } from "@/lib/glossary/get-glossary-context";
-import { getUserProgress } from "@/lib/progress/user-progress";
 import { extractUniqueTaskTerms } from "@/lib/tasks/parser";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDateString } from "@/lib/utils";
@@ -40,43 +38,18 @@ export async function getOrGenerateDailyTask(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("timezone, learning_material")
+    .select("timezone")
     .eq("id", userId)
     .single();
 
   const timezone = profile?.timezone || "UTC";
   const localToday = getLocalDateString(timezone);
   const learningTopic = topic || track.title || "Japanese";
-  const currentProgress = await getUserProgress(userId);
-
-  const { data: recentCompleted } = await supabase
-    .from("daily_tasks")
-    .select("day_number, title, instructions, reflection_notes, difficulty_level")
-    .eq("user_id", userId)
-    .eq("status", "completed")
-    .order("day_number", { ascending: false })
-    .limit(5);
-
-  const history = (recentCompleted ?? [])
-    .slice()
-    .reverse()
-    .map((h) => ({
-      day_number: h.day_number,
-      title: h.title,
-      instructions: h.instructions,
-      reflection_notes: h.reflection_notes,
-      difficulty_level: h.difficulty_level,
-    }));
-
-  const glossaryEntries = await getGlossaryContext();
 
   const { task: aiTask, metadata } = await generateMvpDailyTask(
+    userId,
     learningTopic,
-    currentDay,
-    profile?.learning_material,
-    currentProgress,
-    history,
-    glossaryEntries
+    currentDay
   );
 
   const glossaryTerms = extractUniqueTaskTerms(aiTask.instructions);

@@ -135,7 +135,7 @@ export function DailyTaskCardSkeleton() {
           transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
         />
 
-        {[0, 1, 2, 3].map((index) => (
+        {[0, 1, 2, 3, 4].map((index) => (
           <div
             key={index}
             className="space-y-2 rounded-xl border border-white/6 bg-city-navy/50 p-3"

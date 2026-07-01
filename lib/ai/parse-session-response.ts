@@ -11,6 +11,7 @@ export interface ParsedSession {
 
 const TRAILING_JSON_PATTERN =
   /\n*\{[\s\S]*?"next_recommended_action"[\s\S]*?\}\s*$/;
+const DAY_HEADING_PATTERN = /^#\s*Day\s+\d+[:\s—–-].+\n?/im;
 
 /** Removes trailing Part 2 JSON metadata from session content (UI safety net). */
 export function stripHiddenSessionMetadata(
@@ -26,18 +27,13 @@ function extractTitle(part1: string, dayNumber: number): string {
     return dayHeading[1].trim();
   }
 
-  const anyHeading = part1.match(/^#\s*(.+)$/m);
-  if (anyHeading?.[1]) {
-    return anyHeading[1].trim();
-  }
-
-  return `Day ${dayNumber}: Japanese Study Session`;
+  return "";
 }
 
 /** Removes the leading markdown H1 used as the session title. */
 export function stripSessionHeading(content: string | null | undefined): string {
   if (content == null || content === "") return "";
-  return content.replace(/^#\s*.+\n?/, "").trimStart();
+  return content.replace(DAY_HEADING_PATTERN, "").trimStart();
 }
 
 /** Strips trailing JSON metadata and the duplicate title heading for display. */
@@ -81,7 +77,9 @@ export function parseTwoPartSession(
   }
 
   const { humanReadable, metadata } = parseTrailingJson(trimmed);
-  const title = extractTitle(humanReadable, dayNumber);
+  const title =
+    extractTitle(humanReadable, dayNumber) ||
+    `Day ${dayNumber}: ${metadata.topic || "Japanese Study Session"}`;
   const body = stripSessionHeading(humanReadable);
 
   return { title, humanReadable: body, metadata };

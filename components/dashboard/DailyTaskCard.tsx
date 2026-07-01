@@ -1,18 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  BookOpen,
-  Brain,
-  Check,
-  CheckCircle2,
-  Clock,
-  PenLine,
-  Sparkles,
-} from "lucide-react";
+import { Check, CheckCircle2, Clock } from "lucide-react";
+import { ParsedQuestSections } from "@/components/dashboard/TaskContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { prepareTaskInstructionsForDisplay } from "@/lib/ai/parse-session-response";
+import type { ParsedQuest } from "@/lib/tasks/parser";
 import { cn } from "@/lib/utils";
 import type { DailyTask } from "@/types/database";
 
@@ -22,209 +15,99 @@ const MOCK_DAY_1: Pick<
 > = {
   title: "Day 1: Hiragana Foundations (あ–の)",
   instructions:
-    "Based on our progress, today we are focusing on [TERM:hiragana] recognition, moving us closer to completing the script.\n\n" +
-    "**Theory** (max 10 min)\nOpen Genki I pp. 20–25. Learn あ, い, う, え, お, か, き, く, け, こ. Read each aloud twice.\n\n" +
-    "**Application**\nOn [TERM:genkouyoushi], write each character 5× with correct stroke order (mandatory handwriting). Then Genki I Workbook p. 11, exercises 1–3 only.\n\n" +
-    "**Playful Learning**\nWatch a hiragana stroke-order video for あ–こ. Pause after each character and mimic the motion on paper — sync audio with your hand.\n\n" +
-    "**Methodology**\nTextbook first builds sound–shape links; Workbook p. 11+ reinforces recall; the video adds motor memory without rushing ahead.",
+    "# MAIN QUEST\n## Introduction to Hiragana A-row\n\n" +
+    "**Theory** (max 10 min)\nOpen Genki I pp. 20–25. Read each character aloud twice.\n\n" +
+    "あ | a\nい | i\nう | u\nえ | e\nお | o\n\n" +
+    "**Application**\nOn [TERM:genkouyoushi], write each character 5× with correct stroke order (mandatory handwriting).\n\n" +
+    "**Playful Learning**\nWatch a hiragana stroke-order video for あ–お.\n\n" +
+    "**Methodology**\nTextbook first builds sound–shape links; the video adds motor memory.\n\n" +
+    "# SIDE QUEST\n## Study Environment Setup\n\n**Review**\nSet up your study space and print [TERM:genkouyoushi].\n\n" +
+    "**Application**\nLocate the hiragana chart in your textbook and skim the A-row once.",
   estimated_minutes: 28,
   status: "pending",
 };
 
-const TERM_PATTERN = /\[\s*TERM\s*:\s*([^\]]+?)\s*\]/gi;
-
-const SECTION_HEADERS = [
-  "Theory",
-  "Application",
-  "Playful Learning",
-  "Methodology",
-] as const;
-
-type SectionKey = (typeof SECTION_HEADERS)[number];
-
-type TermSegment =
-  | { type: "text"; value: string }
-  | { type: "term"; value: string };
-
-interface TaskSection {
-  key: SectionKey;
-  body: string;
-}
-
-interface ParsedTaskContent {
-  intro: string;
-  sections: TaskSection[];
-}
+const EMPTY_QUEST: ParsedQuest = { title: "", sections: [] };
 
 interface DailyTaskCardProps {
   task?: DailyTask;
+  quest?: ParsedQuest;
+  questLabel: string;
+  eyebrow?: string;
+  variant?: "main" | "side";
+  completed?: boolean;
+  /** Dim/grayscale the card after local quest completion, before the day is fully saved. */
+  dimmed?: boolean;
+  completeLabel?: string;
+  completedLabel?: string;
   onComplete?: () => void;
 }
 
-const SECTION_CONFIG: Record<
-  SectionKey,
-  {
-    icon: typeof Brain;
-    accent: string;
-    labelClass: string;
-  }
-> = {
-  Theory: {
-    icon: Brain,
-    accent: "border-l-city-teal",
-    labelClass: "text-city-teal",
+const CARD_VARIANTS = {
+  main: {
+    card: "border-city-teal/45 bg-city-navy-light shadow-[0_0_24px_rgba(61,219,207,0.12)]",
+    eyebrow: "text-city-teal",
+    subtitle: "text-white/90",
+    timePill: "border-white/20 bg-white/5 text-city-teal",
+    button:
+      "border-city-teal/60 bg-city-teal text-city-navy shadow-[0_6px_0_0_#238982] active:shadow-[0_2px_0_0_#238982]",
+    completed:
+      "border-city-teal/40 bg-city-teal/15 text-city-teal",
+    xp: "text-city-orange",
   },
-  Application: {
-    icon: PenLine,
-    accent: "border-l-city-magenta",
-    labelClass: "text-city-magenta",
+  side: {
+    card: "border-yellow-400/45 bg-city-navy-light/90 shadow-[0_0_20px_rgba(250,204,21,0.1)]",
+    eyebrow: "text-yellow-300",
+    subtitle: "text-yellow-100/90",
+    timePill: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+    button:
+      "border-yellow-400/60 bg-yellow-400 text-city-navy shadow-[0_6px_0_0_#CA8A04] active:shadow-[0_2px_0_0_#CA8A04]",
+    completed:
+      "border-yellow-400/35 bg-yellow-400/15 text-yellow-300",
+    xp: "text-city-teal",
   },
-  "Playful Learning": {
-    icon: Sparkles,
-    accent: "border-l-city-orange",
-    labelClass: "text-city-orange",
-  },
-  Methodology: {
-    icon: BookOpen,
-    accent: "border-l-city-teal/60",
-    labelClass: "text-city-teal/80",
-  },
-};
+} as const;
 
-function parseTermTags(text: string): TermSegment[] {
-  const segments: TermSegment[] = [];
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(TERM_PATTERN)) {
-    const matchIndex = match.index ?? 0;
-    const term = match[1]?.trim();
-
-    if (matchIndex > lastIndex) {
-      segments.push({ type: "text", value: text.slice(lastIndex, matchIndex) });
-    }
-
-    if (term) {
-      segments.push({ type: "term", value: term });
-    }
-
-    lastIndex = matchIndex + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    segments.push({ type: "text", value: text.slice(lastIndex) });
-  }
-
-  return segments.length > 0 ? segments : [{ type: "text", value: text }];
-}
-
-function renderTextWithTerms(text: string) {
-  return parseTermTags(text).map((segment, index) => {
-    if (segment.type === "term") {
-      return (
-        <mark
-          key={`term-${index}-${segment.value}`}
-          title={`Tap to learn: ${segment.value}`}
-          className={cn(
-            "inline cursor-help rounded-md border border-city-teal/30 bg-city-teal/15 px-1.5 py-0.5",
-            "font-medium text-city-teal not-italic",
-            "transition-all duration-200",
-            "hover:-translate-y-px hover:shadow-[0_0_12px_rgba(61,219,207,0.4)]"
-          )}
-        >
-          {segment.value}
-        </mark>
-      );
-    }
-
-    if (!segment.value) return null;
-
-    return <span key={`text-${index}`}>{segment.value}</span>;
-  });
-}
-
-function splitIntoSections(instructions: string): ParsedTaskContent {
-  const headerPattern = new RegExp(
-    `\\*\\*(${SECTION_HEADERS.map((h) => h.replace(/ /g, " ")).join("|")})\\*\\*(?:\\s*\\([^)]*\\))?`,
-    "gi"
-  );
-
-  const sections: TaskSection[] = [];
-  const matches = [...instructions.matchAll(headerPattern)];
-
-  if (matches.length === 0) {
-    return { intro: instructions.trim(), sections: [] };
-  }
-
-  const firstMatchIndex = matches[0].index ?? 0;
-  const intro = instructions.slice(0, firstMatchIndex).trim();
-
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
-    const headerRaw = match[1];
-    const key = SECTION_HEADERS.find(
-      (h) => h.toLowerCase() === headerRaw.toLowerCase()
-    ) as SectionKey | undefined;
-
-    if (!key) continue;
-
-    const bodyStart = (match.index ?? 0) + match[0].length;
-    const bodyEnd =
-      i + 1 < matches.length
-        ? (matches[i + 1].index ?? instructions.length)
-        : instructions.length;
-
-    const body = instructions.slice(bodyStart, bodyEnd).trim();
-    if (body) {
-      sections.push({ key, body });
-    }
-  }
-
-  return { intro, sections };
-}
-
-function TaskSectionBlock({ section }: { section: TaskSection }) {
-  const config = SECTION_CONFIG[section.key];
-  const Icon = config.icon;
-
-  return (
-    <div
-      className={cn(
-        "space-y-2 rounded-xl border border-white/8 bg-city-navy/40 p-4",
-        "border-l-4",
-        config.accent
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Icon className={cn("h-4 w-4 shrink-0", config.labelClass)} />
-        <span className={cn("pixel-label font-bold", config.labelClass)}>
-          {section.key}
-        </span>
-      </div>
-      <p className="text-sm leading-relaxed text-white/85 sm:text-base">
-        {renderTextWithTerms(section.body)}
-      </p>
-    </div>
-  );
-}
-
-export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
+export function DailyTaskCard({
+  task,
+  quest,
+  questLabel,
+  eyebrow,
+  variant = "main",
+  completed,
+  dimmed = false,
+  completeLabel,
+  completedLabel,
+  onComplete,
+}: DailyTaskCardProps) {
   const display = task ?? MOCK_DAY_1;
-  const initiallyCompleted = display.status === "completed";
+  const resolvedQuest = quest ?? EMPTY_QUEST;
+  const style = CARD_VARIANTS[variant];
+  const initiallyCompleted = completed ?? display.status === "completed";
 
   const [localCompleted, setLocalCompleted] = useState(initiallyCompleted);
   const [showXpBurst, setShowXpBurst] = useState(false);
   const [buttonBounce, setButtonBounce] = useState(false);
 
-  const isCompleted = initiallyCompleted || localCompleted;
+  const isCompleted = completed ?? localCompleted;
+  const displayEyebrow = eyebrow ?? "Today's Task";
+  const actionLabel = completeLabel ?? "Complete Quest";
+  const doneLabel = completedLabel ?? "Quest complete!";
+  const topicTitle = resolvedQuest.title || questLabel;
 
-  const prepared = prepareTaskInstructionsForDisplay(display.instructions);
-  const { intro, sections } = splitIntoSections(prepared);
+  useEffect(() => {
+    if (completed != null) {
+      setLocalCompleted(completed);
+    }
+  }, [completed]);
 
   function handleComplete() {
     if (isCompleted) return;
 
     setButtonBounce(true);
-    setLocalCompleted(true);
+    if (completed == null) {
+      setLocalCompleted(true);
+    }
     setShowXpBurst(true);
 
     setTimeout(() => setButtonBounce(false), 400);
@@ -235,21 +118,63 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
 
   return (
     <motion.div
+      className={cn(
+        "relative transition-all duration-500 ease-out",
+        dimmed && "pointer-events-none opacity-55 grayscale-[0.45]",
+        isCompleted && !dimmed && "ring-1 ring-white/10"
+      )}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <Card className="border-magenta-500/25 bg-city-navy-light shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
+      {isCompleted && (
+        <motion.div
+          className={cn(
+            "pointer-events-none absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full border bg-city-navy/80 shadow-[0_0_20px_rgba(61,219,207,0.45)]",
+            variant === "main"
+              ? "border-city-teal/50"
+              : "border-yellow-400/50"
+          )}
+          initial={{ scale: 0, rotate: -20 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 380, damping: 16 }}
+        >
+          <CheckCircle2
+            className={cn(
+              "h-6 w-6 drop-shadow-[0_0_8px_rgba(61,219,207,0.9)]",
+              variant === "main" ? "text-city-teal" : "text-yellow-300"
+            )}
+          />
+        </motion.div>
+      )}
+
+      <Card
+        className={cn(
+          "shadow-[0_8px_0_0_rgba(0,0,0,0.25)]",
+          variant === "side" && "scale-[0.98]",
+          style.card
+        )}
+      >
         <CardHeader className="p-4 sm:p-6">
-          <p className="pixel-label font-bold text-city-magenta">
-            Today&apos;s Task
+          <p className={cn("pixel-label font-bold", style.eyebrow)}>
+            {displayEyebrow}
           </p>
           <CardTitle className="text-xl font-extrabold leading-tight text-white sm:text-2xl">
-            {display.title}
+            {questLabel}
           </CardTitle>
-          {display.estimated_minutes != null && (
+          {topicTitle !== questLabel && (
+            <p className={cn("text-base font-semibold sm:text-lg", style.subtitle)}>
+              {topicTitle}
+            </p>
+          )}
+          {variant === "main" && display.estimated_minutes != null && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-city-teal/30 bg-city-teal/10 px-3 py-1 text-sm font-medium text-city-teal">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium",
+                  style.timePill
+                )}
+              >
                 <Clock className="h-3.5 w-3.5" />
                 ~{display.estimated_minutes} min
               </span>
@@ -263,35 +188,22 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
         </CardHeader>
 
         <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
-          {intro && (
-            <p className="text-sm leading-relaxed text-white/75 sm:text-base">
-              {renderTextWithTerms(intro)}
-            </p>
-          )}
-
-          {sections.length > 0 ? (
-            <div className="space-y-3">
-              {sections.map((section) => (
-                <TaskSectionBlock key={section.key} section={section} />
-              ))}
-            </div>
-          ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85 sm:text-base">
-              {renderTextWithTerms(prepared)}
-            </p>
-          )}
+          <ParsedQuestSections quest={resolvedQuest} />
 
           <div className="relative pt-2">
             {isCompleted ? (
               <motion.div
-                className="flex h-14 items-center justify-center gap-2 rounded-xl border border-city-teal/30 bg-city-teal/15 text-city-teal shadow-[0_4px_0_0_rgba(0,0,0,0.2)]"
+                className={cn(
+                  "flex h-14 items-center justify-center gap-2 rounded-xl border shadow-[0_4px_0_0_rgba(0,0,0,0.2)]",
+                  style.completed
+                )}
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 300 }}
               >
                 <CheckCircle2 className="h-5 w-5" />
                 <span className="text-base font-semibold sm:text-lg">
-                  Completed today!
+                  {doneLabel}
                 </span>
               </motion.div>
             ) : (
@@ -306,24 +218,27 @@ export function DailyTaskCard({ task, onComplete }: DailyTaskCardProps) {
                 transition={{ duration: 0.4, ease: "easeOut" }}
                 className={cn(
                   "flex h-14 w-full items-center justify-center gap-3 rounded-xl",
-                  "border-2 border-city-magenta/50 bg-city-magenta text-base font-bold text-white sm:text-lg",
-                  "shadow-[0_6px_0_0_#B8326A]",
+                  "border-2 text-base font-bold sm:text-lg",
+                  style.button,
                   "transition-colors duration-300",
                   "hover:brightness-110",
-                  "active:translate-y-1 active:scale-[0.98] active:shadow-[0_2px_0_0_#B8326A]"
+                  "active:translate-y-1 active:scale-[0.98]"
                 )}
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-white/60 bg-white/10">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-current/40 bg-black/10">
                   <Check className="h-4 w-4" />
                 </span>
-                Complete Daily Task
+                {actionLabel}
               </motion.button>
             )}
 
             <AnimatePresence>
               {showXpBurst && (
                 <motion.span
-                  className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 font-bold text-city-orange"
+                  className={cn(
+                    "pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 font-bold",
+                    style.xp
+                  )}
                   initial={{ opacity: 1, y: 0, scale: 1 }}
                   animate={{ opacity: 0, y: -40, scale: 1.1 }}
                   exit={{ opacity: 0 }}

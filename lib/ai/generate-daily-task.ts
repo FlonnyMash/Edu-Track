@@ -5,7 +5,6 @@ import {
   buildUserPrompt,
   getDailyTaskPrompt,
   type GenerationContext,
-  type TaskHistoryEntry,
 } from "./prompts";
 import { parseTwoPartSession } from "./parse-session-response";
 import {
@@ -13,7 +12,10 @@ import {
   type AiTaskResponse,
 } from "@/lib/validations/schemas";
 import type { CurrentProgress } from "./prompts";
-import type { GlossaryEntry } from "@/lib/glossary/types";
+import { getGlossaryContext } from "@/lib/glossary/get-glossary-context";
+import { parseLearningMaterials } from "@/lib/profiles/learning-materials";
+import { buildProgressContext } from "@/lib/progress/user-progress";
+import { createClient } from "@/lib/supabase/server";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -50,51 +52,67 @@ const JAPANESE_FALLBACK_TASKS: Record<
   1: {
     title: "Day 1: Hiragana Foundations (あ–の)",
     description:
-      "Based on our progress, today we are focusing on [TERM:hiragana] recognition, moving us closer to completing the script.\n\n" +
-      "**Theory** (max 10 min)\nOpen Genki I pp. 20–25. Learn あ, い, う, え, お, か, き, く, け, こ. Read each aloud twice.\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we are focusing on [TERM:hiragana] recognition, moving us closer to completing the script.\n\n" +
+      "**Theory** (max 10 min)\nOpen Genki I pp. 20–25. Read each character aloud twice.\n\n" +
+      "あ | a\nい | i\nう | u\nえ | e\nお | o\nか | ka\nき | ki\nく | ku\nけ | ke\nこ | ko\n\n" +
       "**Application**\nOn [TERM:genkouyoushi], write each character 5× with correct stroke order (mandatory handwriting). Then Genki I Workbook p. 11, exercises 1–3 only.\n\n" +
       "**Playful Learning**\nWatch a hiragana stroke-order video for あ–こ. Pause after each character and mimic the motion on paper — sync audio with your hand.\n\n" +
-      "**Methodology**\nTextbook first builds sound–shape links; Workbook p. 11+ reinforces recall; the video adds motor memory without rushing ahead.",
+      "**Methodology**\nTextbook first builds sound–shape links; Workbook p. 11+ reinforces recall; the video adds motor memory without rushing ahead.\n\n" +
+      "# SIDE QUEST\n**Review**\nFirst session — no prior rows to review yet. Quickly read あ, い, う, え, お aloud once to warm up.\n\n" +
+      "**Application**\nSay each A-row sound once while pointing at the matching character.",
     estimated_minutes: 28,
   },
   2: {
     title: "Day 2: Hiragana さ–と",
     description:
-      "Based on our progress, today we are focusing on the next [TERM:hiragana] rows, building on Day 1.\n\n" +
-      "**Theory** (max 10 min)\nReview あ–こ from Genki I, then learn さ, し, す, せ, そ, た, ち, つ, て, と (pp. 26–27).\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we are focusing on the next [TERM:hiragana] rows, building on Day 1.\n\n" +
+      "**Theory** (max 10 min)\nLearn from Genki I pp. 26–27. Read each aloud twice.\n\n" +
+      "さ | sa\nし | shi\nす | su\nせ | se\nそ | so\nた | ta\nち | chi\nつ | tsu\nて | te\nと | to\n\n" +
       "**Application**\nWrite each new character 5× on [TERM:genkouyoushi] (mandatory handwriting). Complete Genki I Workbook p. 11–12, exercises 4–6.\n\n" +
       "**Playful Learning**\nListen to a hiragana song covering さ–と while reviewing your flashcards. Say each sound as it plays.\n\n" +
-      "**Methodology**\nReview before adding new characters avoids mixing similar shapes (し vs そ). Workbook p. 11+ locks in muscle memory.",
+      "**Methodology**\nReview before adding new characters avoids mixing similar shapes (し vs そ). Workbook p. 11+ locks in muscle memory.\n\n" +
+      "# SIDE QUEST\n**Review**\nBefore writing the new S-row and T-row characters, quickly write the A-row (あ–お) and K-row (か–こ) once each on [TERM:genkouyoushi].\n\n" +
+      "**Application**\nRead あ–こ aloud once without looking at romanization.",
     estimated_minutes: 30,
   },
   3: {
     title: "Day 3: Hiragana な–ほ",
     description:
-      "Based on our progress, today we are focusing on な–ほ rows of [TERM:hiragana].\n\n" +
-      "**Theory** (max 10 min)\nQuick review of Days 1–2, then learn な–ほ from Genki I pp. 28–29.\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we are focusing on な–ほ rows of [TERM:hiragana].\n\n" +
+      "**Theory** (max 10 min)\nLearn from Genki I pp. 28–29. Read each aloud twice.\n\n" +
+      "な | na\nに | ni\nぬ | nu\nね | ne\nの | no\nは | ha\nひ | hi\nふ | fu\nへ | he\nほ | ho\n\n" +
       "**Application**\nHandwrite each new character on [TERM:genkouyoushi] (mandatory). Workbook p. 12–13. Copy 3 greetings: こんにちは, ありがとう, さようなら.\n\n" +
       "**Playful Learning**\nUse Forvo to hear native pronunciation of the three greetings — repeat each twice after listening.\n\n" +
-      "**Methodology**\nReading and writing aloud connects visual recognition with pronunciation before grammar begins.",
+      "**Methodology**\nReading and writing aloud connects visual recognition with pronunciation before grammar begins.\n\n" +
+      "# SIDE QUEST\n**Review**\nQuickly write the A-row, K-row, and S-row/T-row characters once each before starting today's N-row.\n\n" +
+      "**Application**\nCircle any characters you hesitated on and read them aloud again.",
     estimated_minutes: 28,
   },
   4: {
     title: "Day 4: Hiragana ま–よ",
     description:
-      "Based on our progress, today we are focusing on ま–よ and consolidating [TERM:hiragana] learned so far.\n\n" +
-      "**Theory** (max 10 min)\nReview all hiragana learned, then learn ま, み, む, め, も, や, ゆ, よ (Genki I pp. 30–31).\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we are focusing on ま–よ and consolidating [TERM:hiragana] learned so far.\n\n" +
+      "**Theory** (max 10 min)\nLearn from Genki I pp. 30–31. Read each aloud twice.\n\n" +
+      "ま | ma\nみ | mi\nむ | mu\nめ | me\nも | mo\nや | ya\nゆ | yu\nよ | yo\n\n" +
       "**Application**\nWrite 5 words on [TERM:genkouyoushi] (ねこ, みず, やま) — mandatory handwriting. Workbook p. 13.\n\n" +
       "**Playful Learning**\nWatch a stroke-order video for や, ゆ, よ — these differ from other rows; mimic each stroke slowly.\n\n" +
-      "**Methodology**\nMixing characters in words mirrors real reading, not just isolated drills.",
+      "**Methodology**\nMixing characters in words mirrors real reading, not just isolated drills.\n\n" +
+      "# SIDE QUEST\n**Review**\nWrite な, に, ぬ, ね, の and は, ひ, ふ, へ, ほ once each from memory before today's M-row and Y-row.\n\n" +
+      "**Application**\nRead one older row backward to strengthen recall.",
     estimated_minutes: 30,
   },
   5: {
     title: "Day 5: Complete Hiragana + Numbers",
     description:
-      "Based on our progress, today we finish [TERM:hiragana] and learn numbers 1–10.\n\n" +
-      "**Theory** (max 10 min)\nFinish remaining hiragana: ら–ん (Genki I pp. 32–33). Learn いち–じゅう.\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we finish [TERM:hiragana] and learn numbers 1–10.\n\n" +
+      "**Theory** (max 10 min)\nFinish remaining hiragana from Genki I pp. 32–33, then numbers 1–10.\n\n" +
+      "ら | ra\nり | ri\nる | ru\nれ | re\nろ | ro\nわ | wa\nを | wo\nん | n\n" +
+      "いち | ichi\nに | ni\nさん | san\nよん | yon\nご | go\nろく | roku\nなな | nana\nはち | hachi\nきゅう | kyuu\nじゅう | juu\n\n" +
       "**Application**\nHandwrite each number in hiragana on [TERM:genkouyoushi] (mandatory). Workbook p. 14. Say numbers in order 3 times.\n\n" +
       "**Playful Learning**\nListen to a Japanese counting song (1–10) and write each number as you hear it.\n\n" +
-      "**Methodology**\nNumbers appear everywhere in daily Japanese — lock them in before Lesson 1 grammar.",
+      "**Methodology**\nNumbers appear everywhere in daily Japanese — lock them in before Lesson 1 grammar.\n\n" +
+      "# SIDE QUEST\n**Review**\nQuickly write one character from each row learned so far (あ, か, さ, た, な, は, ま, や, ら) before today's finale.\n\n" +
+      "**Application**\nRead the reviewed characters aloud and mark any that need another pass.",
     estimated_minutes: 32,
   },
 };
@@ -114,11 +132,13 @@ function getJapaneseFallbackTask(dayNumber: number): {
   return {
     title: `Day ${dayNumber}: Japanese Listening & Recall`,
     description:
-      "Based on our progress, today we consolidate script knowledge before advancing.\n\n" +
+      "# MAIN QUEST\nBased on our progress, today we consolidate script knowledge before advancing.\n\n" +
       "**Theory**\nReview [TERM:hiragana] from prior days (5 min).\n\n" +
-      "**Application**\nWrite 10 characters from memory on [TERM:genkouyoushi]. Listen to a beginner podcast (10 min); write 5 new words with meanings.\n\n" +
+      "**Application**\nListen to a beginner podcast (10 min); write 5 new words with meanings.\n\n" +
       "**Playful Learning**\nUse Jisho.org to verify word meanings — search each word and read the first definition aloud.\n\n" +
-      "**Methodology**\nListening connects script knowledge to real speech patterns.",
+      "**Methodology**\nListening connects script knowledge to real speech patterns.\n\n" +
+      "# SIDE QUEST\n**Review**\nWrite 10 characters from earlier rows from memory on [TERM:genkouyoushi] before listening practice.\n\n" +
+      "**Application**\nRepeat any missed characters once after checking a visual reference.",
     estimated_minutes: 30,
   };
 }
@@ -155,10 +175,13 @@ function buildFallbackTask(
   return {
     title: `Day ${dayNumber}: Explore ${topic}`,
     instructions:
-      `Based on our progress, today we take the next small step in ${topic}.\n\n` +
+      `# MAIN QUEST\nBased on our progress, today we take the next small step in ${topic}.\n\n` +
       "**Theory**\nChoose one sub-topic appropriate for this day.\n\n" +
       "**Application**\nTake actionable notes and practice for 15 minutes.\n\n" +
-      "**Methodology**\nBuild incrementally — one concept per session.",
+      "**Playful Learning**\nUse one lightweight resource that makes the topic more memorable.\n\n" +
+      "**Methodology**\nBuild incrementally — one concept per session.\n\n" +
+      "# SIDE QUEST\n**Review**\nReview one previously learned idea for 3–5 minutes.\n\n" +
+      "**Application**\nWrite a short note connecting the review idea to today's Main Quest.",
     estimated_minutes: 25,
     difficulty_level: Math.min(dayNumber, 10),
     rationale: "Fallback task generated when AI is unavailable",
@@ -179,19 +202,40 @@ function normalizeParsedSession(
   };
 }
 
+async function fetchActiveLearningMaterial(userId: string): Promise<{
+  activeMaterial: string;
+  materials: string[];
+}> {
+  const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("learning_material")
+    .eq("id", userId)
+    .single();
+
+  const materials = parseLearningMaterials(profile?.learning_material);
+  const activeMaterial = materials.length > 0 ? materials.join(", ") : "";
+
+  return { activeMaterial, materials };
+}
+
 /** Material-aware daily task generation for the Dashboard planner. */
 export async function generateMvpDailyTask(
+  userId: string,
   topic: string,
-  dayNumber: number,
-  learningMaterials?: string | string[] | null,
-  currentProgress?: CurrentProgress,
-  history: TaskHistoryEntry[] = [],
-  glossaryEntries: GlossaryEntry[] = []
+  dayNumber: number
 ): Promise<{ task: AiTaskResponse; metadata: Record<string, unknown> }> {
-  const progress: CurrentProgress = currentProgress ?? {
-    chapter: "Hiragana",
-    masteredTopics: [],
-  };
+  const [progressContext, glossaryEntries, { activeMaterial, materials }] =
+    await Promise.all([
+      buildProgressContext(userId, dayNumber),
+      getGlossaryContext(),
+      fetchActiveLearningMaterial(userId),
+    ]);
+
+  const isFreshStart =
+    progressContext.currentDay === 1 &&
+    progressContext.previouslyLearnedTerms.length === 0 &&
+    progressContext.recentPerformance.completedTaskCount === 0;
 
   try {
     const response = await fetch(OPENAI_CHAT_URL, {
@@ -206,15 +250,15 @@ export async function generateMvpDailyTask(
           {
             role: "system",
             content: getDailyTaskPrompt(
-              learningMaterials,
-              progress,
-              dayNumber,
+              activeMaterial,
+              materials,
+              progressContext,
               glossaryEntries
             ),
           },
           {
             role: "user",
-            content: buildMvpUserPrompt(topic, dayNumber, progress, history),
+            content: buildMvpUserPrompt(topic, progressContext),
           },
         ],
       }),
@@ -242,9 +286,15 @@ export async function generateMvpDailyTask(
       metadata: {
         model: AI_MODEL,
         prompt_version: PROMPT_VERSION,
+        active_material: activeMaterial || null,
         topic: parsed.metadata.topic,
         day_number: dayNumber,
-        current_progress: progress,
+        progress_context: progressContext,
+        progress_source: isFreshStart ? "default_day_1" : "user_history",
+        current_progress: {
+          chapter: progressContext.currentChapter,
+          masteredTopics: progressContext.masteredTopics,
+        } satisfies CurrentProgress,
         recommend_progression: {
           chapter: parsed.metadata.chapter,
           action: parsed.metadata.next_recommended_action,
@@ -263,6 +313,8 @@ export async function generateMvpDailyTask(
         prompt_version: PROMPT_VERSION,
         topic,
         day_number: dayNumber,
+        progress_context: progressContext,
+        progress_source: isFreshStart ? "default_day_1" : "user_history",
         generated_at: new Date().toISOString(),
         error: error instanceof Error ? error.message : "Unknown error",
       },

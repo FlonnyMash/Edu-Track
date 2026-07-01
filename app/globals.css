@@ -25,6 +25,8 @@
   --color-city-orange: #ff9a56;
   --color-city-teal: #3ddbcf;
   --color-city-muted: #6b7280;
+  --color-neon-cyan: #3ddbcf;
+  --color-neon-yellow: #fde047;
   --font-sans: var(--font-outfit), system-ui, sans-serif;
 }
 

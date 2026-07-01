@@ -2,87 +2,144 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeTaskAction } from "@/app/actions/complete-task";
+import { toast } from "sonner";
+import { advanceToNextDayAction } from "@/app/actions/advance-to-next-day";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
-import { DailyTaskCard } from "@/components/dashboard/DailyTaskCard";
+import { DailyQuestBoard } from "@/components/dashboard/DailyQuestBoard";
 import { DailyTaskCardSkeleton } from "@/components/dashboard/DailyTaskCardSkeleton";
-import { CompletionSheet } from "@/components/dashboard/CompletionSheet";
 import { Timer } from "@/components/Timer";
 import { CompanionSprite } from "@/components/gamification/CompanionSprite";
 import { ProgressMap } from "@/components/gamification/ProgressMap";
 import { Card } from "@/components/ui/card";
 import { getActiveMapNode } from "@/lib/gamification/map";
+import { cn } from "@/lib/utils";
 import type { DailyTask, GamificationStats } from "@/types/database";
 
 export function DashboardClient() {
   const router = useRouter();
-  const [task, setTask] = useState<DailyTask | null>(null);
+  const [todayTask, setTodayTask] = useState<DailyTask | null>(null);
+  const [viewedTask, setViewedTask] = useState<DailyTask | null>(null);
   const [stats, setStats] = useState<GamificationStats | null>(null);
   const [trackTitle, setTrackTitle] = useState<string | null>(null);
-  const [displayDay, setDisplayDay] = useState(1);
+  const [activeDay, setActiveDay] = useState(1);
+  const [selectedDay, setSelectedDay] = useState(1);
   const [taskLoading, setTaskLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [completionOpen, setCompletionOpen] = useState(false);
+  const [celebrateFlash, setCelebrateFlash] = useState(false);
   const [highlightNode, setHighlightNode] = useState<number | null>(null);
   const hasLoadedStatsRef = useRef(false);
+  const selectedDayRef = useRef(selectedDay);
 
-  const fetchData = useCallback(async (options?: { optimisticDayDelta?: number }) => {
-    setError(null);
-    setTaskLoading(true);
-    setTask((current) => {
-      if (current) {
-        if (options?.optimisticDayDelta) {
-          setDisplayDay(current.day_number + options.optimisticDayDelta);
+  useEffect(() => {
+    selectedDayRef.current = selectedDay;
+  }, [selectedDay]);
+
+  const loadDay = useCallback(
+    async (day: number, today: DailyTask | null) => {
+      if (!today) return false;
+
+      setTaskLoading(true);
+      try {
+        if (day === today.day_number) {
+          setViewedTask(today);
+          setSelectedDay(day);
+          return true;
         }
-        return null;
+
+        const res = await fetch(`/api/tasks/by-day?day=${day}`);
+        if (!res.ok) {
+          const data = await res.json();
+          toast.error("Could not load that day", {
+            description: data.error || "Task not found",
+          });
+          return false;
+        }
+
+        const data = await res.json();
+        setViewedTask(data.task);
+        setSelectedDay(day);
+        return true;
+      } catch {
+        toast.error("Could not load that day");
+        return false;
+      } finally {
+        setTaskLoading(false);
       }
-      return current;
-    });
-    if (!hasLoadedStatsRef.current) {
-      setStatsLoading(true);
+    },
+    []
+  );
+
+  const fetchStats = useCallback(async () => {
+    const statsRes = await fetch("/api/gamification/stats");
+    if (!statsRes.ok) {
+      const data = await statsRes.json();
+      throw new Error(data.error || "Failed to load stats");
     }
-
-    const statsPromise = fetch("/api/gamification/stats")
-      .then(async (statsRes) => {
-        if (!statsRes.ok) {
-          const data = await statsRes.json();
-          throw new Error(data.error || "Failed to load stats");
-        }
-        const statsData = await statsRes.json();
-        setStats(statsData.stats);
-        setTrackTitle(statsData.trackTitle);
-        if (typeof statsData.currentDay === "number") {
-          setDisplayDay(statsData.currentDay);
-        }
-        hasLoadedStatsRef.current = true;
-      })
-      .finally(() => setStatsLoading(false));
-
-    const taskPromise = fetch("/api/tasks/today")
-      .then(async (taskRes) => {
-        if (!taskRes.ok) {
-          const data = await taskRes.json();
-          throw new Error(data.error || "Failed to load task");
-        }
-        const taskData = await taskRes.json();
-        setTask(taskData.task);
-        if (taskData.task?.day_number != null) {
-          setDisplayDay(taskData.task.day_number);
-        }
-      })
-      .finally(() => setTaskLoading(false));
-
-    try {
-      await Promise.all([taskPromise, statsPromise]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+    const statsData = await statsRes.json();
+    setStats(statsData.stats);
+    setTrackTitle(statsData.trackTitle);
+    if (typeof statsData.currentDay === "number") {
+      setActiveDay(statsData.currentDay);
     }
+    hasLoadedStatsRef.current = true;
+    return statsData;
   }, []);
+
+  const fetchTodayTask = useCallback(async () => {
+    const taskRes = await fetch("/api/tasks/today");
+    if (!taskRes.ok) {
+      const data = await taskRes.json();
+      throw new Error(data.error || "Failed to load task");
+    }
+    const taskData = await taskRes.json();
+    return taskData.task as DailyTask;
+  }, []);
+
+  const fetchData = useCallback(
+    async (options?: { optimisticDayDelta?: number }) => {
+      setError(null);
+      setTaskLoading(true);
+      if (!hasLoadedStatsRef.current) {
+        setStatsLoading(true);
+      }
+
+      const browsingHistory =
+        todayTask != null &&
+        selectedDayRef.current !== todayTask.day_number;
+
+      try {
+        const [today, _statsData] = await Promise.all([
+          fetchTodayTask(),
+          fetchStats().finally(() => setStatsLoading(false)),
+        ]);
+
+        setTodayTask(today);
+
+        if (options?.optimisticDayDelta && today) {
+          const optimisticDay = today.day_number + options.optimisticDayDelta;
+          setSelectedDay(optimisticDay);
+          setViewedTask(null);
+        } else if (browsingHistory) {
+          await loadDay(selectedDayRef.current, today);
+        } else {
+          setViewedTask(today);
+          setSelectedDay(today.day_number);
+          setTaskLoading(false);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        setTaskLoading(false);
+      }
+    },
+    [fetchStats, fetchTodayTask, loadDay, todayTask]
+  );
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
+  }, []);
 
   useEffect(() => {
     function handleRefresh() {
@@ -93,25 +150,104 @@ export function DashboardClient() {
     return () => window.removeEventListener("edu-track:refresh", handleRefresh);
   }, [fetchData]);
 
-  async function handleComplete(reflectionNotes: string) {
-    if (!task) return;
+  const goToCurrentDay = useCallback(() => {
+    if (!todayTask) return;
+    void loadDay(todayTask.day_number, todayTask);
+  }, [loadDay, todayTask]);
 
-    const data = await completeTaskAction(
-      task.id,
-      reflectionNotes || undefined
-    );
+  const selectDay = useCallback(
+    (day: number) => {
+      if (!todayTask) return;
+      if (day === todayTask.day_number) {
+        goToCurrentDay();
+        return;
+      }
+      void loadDay(day, todayTask);
+    },
+    [goToCurrentDay, loadDay, todayTask]
+  );
 
-    setTask(data.task);
-    setStats(data.stats);
-    setDisplayDay(data.task.day_number);
+  const goToPreviousDay = useCallback(() => {
+    if (selectedDay <= 1 || !todayTask) return;
+    void loadDay(selectedDay - 1, todayTask);
+  }, [loadDay, selectedDay, todayTask]);
+
+  const goToNextDay = useCallback(async () => {
+    if (!todayTask || !viewedTask) return;
+
+    setIsNavigating(true);
+    const nextDay = selectedDay + 1;
+
+    try {
+      const res = await fetch(`/api/tasks/by-day?day=${nextDay}`);
+      if (res.ok) {
+        const data = await res.json();
+        setViewedTask(data.task);
+        setSelectedDay(nextDay);
+        return;
+      }
+
+      const onTodayCompleted =
+        selectedDay === todayTask.day_number &&
+        todayTask.status === "completed";
+
+      if (!onTodayCompleted) {
+        toast.error("Next day not available yet");
+        return;
+      }
+
+      setTaskLoading(true);
+      const { task: newTask } = await advanceToNextDayAction();
+      setTodayTask(newTask);
+      setViewedTask(newTask);
+      setSelectedDay(newTask.day_number);
+
+      const statsData = await fetchStats();
+      if (typeof statsData.currentDay === "number") {
+        setActiveDay(statsData.currentDay);
+      }
+
+      router.refresh();
+    } catch (err) {
+      toast.error("Could not advance to next day", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setIsNavigating(false);
+      setTaskLoading(false);
+    }
+  }, [fetchStats, router, selectedDay, todayTask, viewedTask]);
+
+  function handleTaskCompleted({
+    task: completedTask,
+    stats: updatedStats,
+  }: {
+    task: DailyTask;
+    stats: GamificationStats;
+    xpAwarded: number;
+    coinsAwarded: number;
+  }) {
+    setTodayTask(completedTask);
+    setViewedTask(completedTask);
+    setStats(updatedStats);
+    setSelectedDay(completedTask.day_number);
+    setActiveDay(completedTask.day_number + 1);
+
     const activeNode = getActiveMapNode(
-      data.task.day_number,
-      data.task.status === "completed"
+      completedTask.day_number,
+      completedTask.status === "completed"
     );
     setHighlightNode(activeNode);
     setTimeout(() => setHighlightNode(null), 2000);
+
+    setCelebrateFlash(true);
+    setTimeout(() => setCelebrateFlash(false), 2400);
+
     router.refresh();
   }
+
+  const isHistoricalView =
+    todayTask != null && selectedDay !== todayTask.day_number;
 
   if (error) {
     return (
@@ -154,42 +290,74 @@ export function DashboardClient() {
         <DashboardHeader
           streak={stats.current_streak}
           totalXp={stats.total_xp}
+          celebrate={celebrateFlash}
         />
       )}
 
-      <Card className="relative flex justify-center overflow-hidden border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
+      <Card
+        className={cn(
+          "relative flex justify-center overflow-hidden border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)] transition-all duration-300",
+          celebrateFlash && "animate-pulse-glow scale-[1.02]"
+        )}
+      >
         <div className="collectible-glow pointer-events-none absolute inset-0" />
         <CompanionSprite
-          currentDay={displayDay}
+          currentDay={selectedDay}
           trackTitle={trackTitle ?? undefined}
-          dayNumber={displayDay}
+          dayNumber={selectedDay}
         />
       </Card>
-
-      {taskLoading || !task ? (
-        <DailyTaskCardSkeleton />
-      ) : (
-        <DailyTaskCard
-          task={task}
-          onComplete={() => setCompletionOpen(true)}
-        />
-      )}
 
       <Timer />
 
+      {isHistoricalView && todayTask ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-city-teal/30 bg-city-teal/10 px-4 py-2.5">
+          <p className="text-sm text-city-teal">
+            Viewing Day {selectedDay}
+          </p>
+          <button
+            type="button"
+            onClick={goToCurrentDay}
+            className="shrink-0 text-sm font-semibold text-city-magenta transition-colors hover:text-city-orange"
+          >
+            Back to Current Day (Day {todayTask.day_number})
+          </button>
+        </div>
+      ) : null}
+
+      {taskLoading || !viewedTask ? (
+        <DailyTaskCardSkeleton />
+      ) : (
+        <DailyQuestBoard
+          task={viewedTask}
+          selectedDay={selectedDay}
+          isDayComplete={viewedTask.status === "completed"}
+          isHistoricalView={isHistoricalView}
+          canGoPrevious={selectedDay > 1}
+          canGoNext={
+            viewedTask.status === "completed" &&
+            (selectedDay < (todayTask?.day_number ?? selectedDay) ||
+              (todayTask?.status === "completed" &&
+                selectedDay === todayTask.day_number))
+          }
+          isNavigating={isNavigating}
+          onPreviousDay={goToPreviousDay}
+          onGoToNextDay={() => void goToNextDay()}
+          onTaskCompleted={handleTaskCompleted}
+        />
+      )}
+
       <Card className="relative overflow-hidden border-teal-500/20 bg-city-navy-light/80 p-5 shadow-[0_6px_0_0_rgba(0,0,0,0.2)]">
         <ProgressMap
-          currentDay={displayDay}
-          isTodayCompleted={!taskLoading && task?.status === "completed"}
+          selectedDay={selectedDay}
+          activeDay={activeDay}
+          isTodayCompleted={
+            !taskLoading && todayTask?.status === "completed"
+          }
           highlightNode={highlightNode}
+          onSelectDay={selectDay}
         />
       </Card>
-
-      <CompletionSheet
-        open={completionOpen}
-        onClose={() => setCompletionOpen(false)}
-        onSubmit={handleComplete}
-      />
     </div>
   );
 }
