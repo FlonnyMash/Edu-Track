@@ -9,6 +9,7 @@ import { DailyTaskCard } from "@/components/dashboard/DailyTaskCard";
 import { DayCompletePanel } from "@/components/dashboard/DayCompletePanel";
 import { triggerJackpotConfetti } from "@/lib/gamification/trigger-jackpot-confetti";
 import { parseDailyTask, type ParsedQuest } from "@/lib/tasks/parser";
+import { parseQuestStructureFromMetadata } from "@/lib/tasks/quest-structure";
 import { cn } from "@/lib/utils";
 import type { DailyTask, GamificationStats } from "@/types/database";
 
@@ -72,6 +73,11 @@ export function DailyQuestBoard({
   const parsed = useMemo(
     () => parseDailyTask(task.instructions),
     [task.instructions]
+  );
+
+  const questStructure = useMemo(
+    () => parseQuestStructureFromMetadata(task.ai_metadata),
+    [task.ai_metadata]
   );
 
   const sideQuest = useMemo(() => {
@@ -140,9 +146,15 @@ export function DailyQuestBoard({
 
   const isBusy = isSubmitting || isNavigating;
   const showDayCompletePanel = isDayComplete && !isHistoricalView;
+  const sideQuestLabel =
+    questStructure?.side.type === "preparation"
+      ? "Study Prep"
+      : questStructure?.side.type === "srs_review"
+        ? "SRS Review Drill"
+        : "Side Quest";
 
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4 overflow-visible">
       <AnimatePresence mode="wait">
         {showDayCompletePanel ? (
           <DayCompletePanel
@@ -154,7 +166,7 @@ export function DailyQuestBoard({
         ) : (
           <motion.div
             key="quests"
-            className="space-y-4"
+            className="space-y-4 overflow-visible"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, y: -8 }}
@@ -164,7 +176,7 @@ export function DailyQuestBoard({
               task={task}
               questLabel="Main Quest"
               quest={parsed.mainQuest}
-              eyebrow="Primary Objective"
+              eyebrow={questStructure?.main.goal ?? "Primary Objective"}
               variant="main"
               completed={mainDone}
               dimmed={mainDone && !isDayComplete}
@@ -177,7 +189,7 @@ export function DailyQuestBoard({
 
             <DailyTaskCard
               task={task}
-              questLabel="Side Quest"
+              questLabel={sideQuestLabel}
               quest={sideQuest}
               eyebrow="Bonus Objective"
               variant="side"
@@ -245,7 +257,8 @@ export function DailyQuestBoard({
 
       {!isDayComplete && (!mainDone || !sideDone) ? (
         <p className="text-center text-xs text-city-muted">
-          Finish both quests to unlock Complete Day
+          Finish both quests to unlock Complete Day. Use the Review Stack above
+          for interactive SRS cards.
         </p>
       ) : null}
 

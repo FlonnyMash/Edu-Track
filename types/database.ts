@@ -348,6 +348,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      srs_items: {
+        Row: {
+          id: string;
+          user_id: string;
+          item_key: string;
+          easiness_factor: number;
+          interval: number;
+          repetitions: number;
+          next_review_date: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          item_key: string;
+          easiness_factor?: number;
+          interval?: number;
+          repetitions?: number;
+          next_review_date?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          item_key?: string;
+          easiness_factor?: number;
+          interval?: number;
+          repetitions?: number;
+          next_review_date?: string | null;
+        };
+        Relationships: [];
+      };
+      user_learning_items: {
+        Row: {
+          id: string;
+          user_id: string;
+          term: string;
+          meaning: string;
+          category: string;
+          item_key: string;
+          status: "pending" | "active" | "archived";
+          source: "custom" | "catalog" | "syllabus_sync";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          term: string;
+          meaning: string;
+          category: string;
+          item_key: string;
+          status?: "pending" | "active" | "archived";
+          source?: "custom" | "catalog" | "syllabus_sync";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          term?: string;
+          meaning?: string;
+          category?: string;
+          item_key?: string;
+          status?: "pending" | "active" | "archived";
+          source?: "custom" | "catalog" | "syllabus_sync";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -386,3 +455,6 @@ export type StudySession = Database["public"]["Tables"]["study_sessions"]["Row"]
 export type TamagotchiPhase = Database["public"]["Tables"]["tamagotchi_phases"]["Row"];
 export type ShopItem = Database["public"]["Tables"]["shop_items"]["Row"];
 export type UserInventory = Database["public"]["Tables"]["user_inventory"]["Row"];
+export type SrsItem = Database["public"]["Tables"]["srs_items"]["Row"];
+export type UserLearningItem =
+  Database["public"]["Tables"]["user_learning_items"]["Row"];

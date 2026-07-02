@@ -38,6 +38,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/signup");
   const isAppRoute =
     pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/library") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/tamagotchi") ||
     pathname.startsWith("/onboarding") ||

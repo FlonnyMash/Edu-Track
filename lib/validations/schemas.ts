@@ -35,6 +35,34 @@ export const completeTaskSchema = z.object({
   reflectionNotes: z.string().max(1000).optional(),
 });
 
+export const submitSrsFeedbackSchema = z.object({
+  itemId: z.string().uuid(),
+  isCorrect: z.boolean(),
+  practiceMode: z.boolean().optional(),
+});
+
+export const addCustomItemSchema = z.object({
+  term: z.string().trim().min(1).max(100),
+  meaning: z.string().trim().min(1).max(200),
+  category: z.string().trim().min(1).max(100),
+});
+
+export const toggleLearningItemStatusSchema = z.object({
+  itemId: z.string().uuid(),
+  status: z.enum(["active", "archived"]),
+});
+
+export const activatePendingItemSchema = z.object({
+  itemId: z.string().uuid(),
+});
+
+export const activateCatalogItemSchema = z.object({
+  unitId: z.string().trim().min(1).max(100),
+  character: z.string().trim().min(1).max(50),
+  pronunciation: z.string().trim().max(100),
+  category: z.string().trim().min(1).max(100),
+});
+
 export const saveStudySessionSchema = z.object({
   userId: z.string().uuid(),
   durationSeconds: z.number().int().min(1).max(86400),
@@ -111,11 +139,21 @@ export const progressionEvaluationSchema = z.object({
   mastered_topics: z.array(z.string()),
 });
 
+export const suggestedLearningItemSchema = z.object({
+  term: z.string().trim().min(1).max(100),
+  meaning: z.string().trim().min(1).max(200),
+  romanji: z.string().trim().min(1).max(100),
+});
+
 export const sessionMetadataSchema = z.object({
   topic: z.string(),
   chapter: z.string(),
   next_recommended_action: progressionActionSchema,
   estimated_duration: z.number().int().min(20).max(35),
+  newly_suggested_items: z
+    .array(suggestedLearningItemSchema)
+    .optional()
+    .default([]),
 });
 
 export const aiMvpTaskResponseSchema = z.object({

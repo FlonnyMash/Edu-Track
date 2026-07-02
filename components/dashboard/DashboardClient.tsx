@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { advanceToNextDayAction } from "@/app/actions/advance-to-next-day";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DailyQuestBoard } from "@/components/dashboard/DailyQuestBoard";
+import { DailyQuestEntry } from "@/components/dashboard/DailyQuestEntry";
+import { SrsQuickStart } from "@/components/dashboard/SrsQuickStart";
+import { NewLessonNotification } from "@/components/dashboard/NewLessonNotification";
 import { DailyTaskCardSkeleton } from "@/components/dashboard/DailyTaskCardSkeleton";
 import { Timer } from "@/components/Timer";
 import { CompanionSprite } from "@/components/gamification/CompanionSprite";
@@ -276,10 +279,12 @@ export function DashboardClient() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-8 px-1">
-      <h1 className="bg-linear-to-r from-city-orange via-city-magenta to-city-teal bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
-        Dashboard
-      </h1>
+    <div className="mx-auto flex w-full max-w-md flex-col gap-6 overflow-visible px-1 pb-8">
+      <header className="space-y-1">
+        <h1 className="bg-linear-to-r from-city-orange via-city-magenta to-city-teal bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
+          Dashboard
+        </h1>
+      </header>
 
       {statsLoading || !stats ? (
         <div className="flex gap-3">
@@ -294,21 +299,54 @@ export function DashboardClient() {
         />
       )}
 
-      <Card
-        className={cn(
-          "relative flex justify-center overflow-hidden border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)] transition-all duration-300",
-          celebrateFlash && "animate-pulse-glow scale-[1.02]"
-        )}
-      >
-        <div className="collectible-glow pointer-events-none absolute inset-0" />
-        <CompanionSprite
-          currentDay={selectedDay}
-          trackTitle={trackTitle ?? undefined}
-          dayNumber={selectedDay}
-        />
-      </Card>
+      <SrsQuickStart taskId={todayTask?.id} />
 
-      <Timer />
+      {!isHistoricalView ? (
+        <DailyQuestEntry
+          task={todayTask}
+          isLoading={taskLoading && !todayTask}
+          isHistoricalView={isHistoricalView}
+          streak={stats?.current_streak}
+          canGoNext={todayTask?.status === "completed"}
+          isNavigating={isNavigating}
+          onGoToNextDay={() => void goToNextDay()}
+          onStartMission={async () => {
+            if (todayTask) return;
+            const today = await fetchTodayTask();
+            setTodayTask(today);
+            setViewedTask(today);
+            setSelectedDay(today.day_number);
+          }}
+          onTaskCompleted={handleTaskCompleted}
+        />
+      ) : null}
+
+      <section
+        aria-label="Companion"
+        className="w-full overflow-visible"
+      >
+        <Card
+          className={cn(
+            "relative flex justify-center overflow-visible border-pink-500/30 bg-linear-to-b from-city-navy-light to-city-navy py-6 shadow-[0_8px_0_0_rgba(0,0,0,0.25)] transition-all duration-300",
+            celebrateFlash && "animate-pulse-glow scale-[1.02]"
+          )}
+        >
+          <div className="collectible-glow pointer-events-none absolute inset-0 rounded-xl" />
+          <CompanionSprite
+            currentDay={selectedDay}
+            trackTitle={trackTitle ?? undefined}
+            dayNumber={selectedDay}
+          />
+        </Card>
+      </section>
+
+      <section aria-label="Study timer" className="w-full overflow-visible">
+        <Timer />
+      </section>
+
+      <section aria-label="Notifications" className="w-full overflow-visible">
+        <NewLessonNotification />
+      </section>
 
       {isHistoricalView && todayTask ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-city-teal/30 bg-city-teal/10 px-4 py-2.5">
@@ -325,39 +363,48 @@ export function DashboardClient() {
         </div>
       ) : null}
 
-      {taskLoading || !viewedTask ? (
-        <DailyTaskCardSkeleton />
-      ) : (
-        <DailyQuestBoard
-          task={viewedTask}
-          selectedDay={selectedDay}
-          isDayComplete={viewedTask.status === "completed"}
-          isHistoricalView={isHistoricalView}
-          canGoPrevious={selectedDay > 1}
-          canGoNext={
-            viewedTask.status === "completed" &&
-            (selectedDay < (todayTask?.day_number ?? selectedDay) ||
-              (todayTask?.status === "completed" &&
-                selectedDay === todayTask.day_number))
-          }
-          isNavigating={isNavigating}
-          onPreviousDay={goToPreviousDay}
-          onGoToNextDay={() => void goToNextDay()}
-          onTaskCompleted={handleTaskCompleted}
-        />
-      )}
+      {isHistoricalView ? (
+        <section
+          aria-label="Quest details"
+          className="w-full space-y-4 overflow-visible"
+        >
+          {taskLoading || !viewedTask ? (
+            <DailyTaskCardSkeleton />
+          ) : (
+            <DailyQuestBoard
+              task={viewedTask}
+              selectedDay={selectedDay}
+              isDayComplete={viewedTask.status === "completed"}
+              isHistoricalView={isHistoricalView}
+              canGoPrevious={selectedDay > 1}
+              canGoNext={
+                viewedTask.status === "completed" &&
+                (selectedDay < (todayTask?.day_number ?? selectedDay) ||
+                  (todayTask?.status === "completed" &&
+                    selectedDay === todayTask.day_number))
+              }
+              isNavigating={isNavigating}
+              onPreviousDay={goToPreviousDay}
+              onGoToNextDay={() => void goToNextDay()}
+              onTaskCompleted={handleTaskCompleted}
+            />
+          )}
+        </section>
+      ) : null}
 
-      <Card className="relative overflow-hidden border-teal-500/20 bg-city-navy-light/80 p-5 shadow-[0_6px_0_0_rgba(0,0,0,0.2)]">
-        <ProgressMap
-          selectedDay={selectedDay}
-          activeDay={activeDay}
-          isTodayCompleted={
-            !taskLoading && todayTask?.status === "completed"
-          }
-          highlightNode={highlightNode}
-          onSelectDay={selectDay}
-        />
-      </Card>
+      <section aria-label="Progress map" className="w-full overflow-visible">
+        <Card className="relative overflow-visible border-teal-500/20 bg-city-navy-light/80 p-5 shadow-[0_6px_0_0_rgba(0,0,0,0.2)]">
+          <ProgressMap
+            selectedDay={selectedDay}
+            activeDay={activeDay}
+            isTodayCompleted={
+              !taskLoading && todayTask?.status === "completed"
+            }
+            highlightNode={highlightNode}
+            onSelectDay={selectDay}
+          />
+        </Card>
+      </section>
     </div>
   );
 }

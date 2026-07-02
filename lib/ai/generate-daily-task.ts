@@ -22,6 +22,17 @@ import {
   type SyllabusProgress,
 } from "./syllabus";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getDueSrsItems,
+  toSrsReviewMeta,
+} from "@/lib/supabase/srsService";
+import { buildQuestStructureMetadata } from "@/lib/tasks/quest-structure";
+import {
+  buildLearningItemMap,
+  getActiveLearningItems,
+  persistSuggestedLearningItems,
+} from "@/lib/supabase/learningItemsService";
+import { getLocalDateString } from "@/lib/utils";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -316,18 +327,23 @@ function buildDeterministicSessionMetadata(
 async function fetchActiveLearningMaterial(userId: string): Promise<{
   activeMaterial: string;
   materials: string[];
+  timezone: string;
 }> {
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("learning_material")
+    .select("learning_material, timezone")
     .eq("id", userId)
     .single();
 
   const materials = parseLearningMaterials(profile?.learning_material);
   const activeMaterial = materials.length > 0 ? materials.join(", ") : "";
 
-  return { activeMaterial, materials };
+  return {
+    activeMaterial,
+    materials,
+    timezone: profile?.timezone || "UTC",
+  };
 }
 
 /** Material-aware daily task generation for the Dashboard planner. */
@@ -336,7 +352,7 @@ export async function generateMvpDailyTask(
   topic: string,
   dayNumber: number
 ): Promise<{ task: AiTaskResponse; metadata: Record<string, unknown> }> {
-  const [progressContext, glossaryEntries, { activeMaterial, materials }] =
+  const [progressContext, glossaryEntries, { activeMaterial, materials, timezone }] =
     await Promise.all([
       buildProgressContext(userId, dayNumber),
       getGlossaryContext(),
@@ -355,20 +371,42 @@ export async function generateMvpDailyTask(
   }
 
   const syllabusProgress = resolveSyllabusProgress(syllabusInput);
-  const textbookReference = syllabusProgress.nextTopic.textbookReference;
+  const localToday = getLocalDateString(timezone);
+  const activeLearningItems = await getActiveLearningItems(userId);
+  const learningItemMap = buildLearningItemMap(activeLearningItems);
+  const dueSrsItems =
+    activeLearningItems.length > 0
+      ? await getDueSrsItems(userId, localToday)
+      : [];
+  const srsReviewItems = toSrsReviewMeta(dueSrsItems, learningItemMap);
+  const reviewItems =
+    srsReviewItems.length > 0
+      ? srsReviewItems.map((item) => item.display)
+      : syllabusProgress.reviewItems;
+  const syllabusProgressForPrompt: SyllabusProgress = {
+    ...syllabusProgress,
+    reviewItems,
+  };
+  const textbookReference = syllabusProgressForPrompt.nextTopic.textbookReference;
 
   console.log("[GenerateDailyTask] Syllabus handoff:", {
     dayNumber,
     sessionsCount,
     rawMasteredTopicsCount: progressContext.masteredTopics.length,
     effectiveMasteredTopicsCount: syllabusInput.masteredTopics.length,
-    nextTopicId: syllabusProgress.nextTopic.id,
-    nextTopicTitle: syllabusProgress.nextTopic.title,
-    reviewItemCount: syllabusProgress.reviewItems.length,
-    isFreshStart: syllabusProgress.isFreshStart,
+    nextTopicId: syllabusProgressForPrompt.nextTopic.id,
+    nextTopicTitle: syllabusProgressForPrompt.nextTopic.title,
+    reviewItemCount: reviewItems.length,
+    srsDueCount: dueSrsItems.length,
+    activeLearningCount: activeLearningItems.length,
+    reviewSource:
+      activeLearningItems.length > 0 && dueSrsItems.length > 0
+        ? "srs_db"
+        : "syllabus_fallback",
+    isFreshStart: syllabusProgressForPrompt.isFreshStart,
   });
 
-  const isFreshStart = syllabusProgress.isFreshStart;
+  const isFreshStart = syllabusProgressForPrompt.isFreshStart;
 
   try {
     const response = await fetch(OPENAI_CHAT_URL, {
@@ -387,12 +425,16 @@ export async function generateMvpDailyTask(
               materials,
               syllabusInput,
               glossaryEntries,
-              syllabusProgress
+              syllabusProgressForPrompt
             ),
           },
           {
             role: "user",
-            content: buildMvpUserPrompt(topic, syllabusInput, syllabusProgress),
+            content: buildMvpUserPrompt(
+              topic,
+              syllabusInput,
+              syllabusProgressForPrompt
+            ),
           },
         ],
       }),
@@ -413,19 +455,32 @@ export async function generateMvpDailyTask(
     }
 
     const parsed = parseTwoPartSession(content, dayNumber);
+    const suggestedCategory = syllabusProgressForPrompt.isCurriculumComplete
+      ? "Mastery Consolidation"
+      : syllabusProgressForPrompt.nextTopic.title;
+    const pendingSuggestions = await persistSuggestedLearningItems(
+      userId,
+      parsed.metadata.newly_suggested_items ?? [],
+      suggestedCategory
+    );
     const sessionMetadata = buildDeterministicSessionMetadata(
       parsed,
-      syllabusProgress
+      syllabusProgressForPrompt
     );
     const task = normalizeParsedSession(
       parsed,
       topic,
       dayNumber,
-      syllabusProgress
+      syllabusProgressForPrompt
     );
-    const deterministicTopic = syllabusProgress.isCurriculumComplete
+    const deterministicTopic = syllabusProgressForPrompt.isCurriculumComplete
       ? "Mastery Consolidation Day"
-      : syllabusProgress.nextTopic.title;
+      : syllabusProgressForPrompt.nextTopic.title;
+    const questStructure = buildQuestStructureMetadata(
+      task.instructions,
+      syllabusProgressForPrompt,
+      srsReviewItems
+    );
 
     return {
       task,
@@ -435,6 +490,7 @@ export async function generateMvpDailyTask(
         active_material: activeMaterial || null,
         topic: deterministicTopic,
         day_number: dayNumber,
+        quest_structure: questStructure,
         progress_context: syllabusInput,
         progress_source: isFreshStart ? "default_day_1" : "user_history",
         current_progress: {
@@ -446,12 +502,24 @@ export async function generateMvpDailyTask(
           action: "advance",
         },
         syllabus_progress: {
-          next_topic_id: syllabusProgress.nextTopic.id,
-          next_topic_title: syllabusProgress.nextTopic.title,
+          next_topic_id: syllabusProgressForPrompt.nextTopic.id,
+          next_topic_title: syllabusProgressForPrompt.nextTopic.title,
           textbook_reference: textbookReference ?? null,
-          review_items: syllabusProgress.reviewItems,
-          completed_unit_ids: syllabusProgress.completedUnitIds,
-          is_curriculum_complete: syllabusProgress.isCurriculumComplete,
+          review_items: reviewItems,
+          completed_unit_ids: syllabusProgressForPrompt.completedUnitIds,
+          is_curriculum_complete: syllabusProgressForPrompt.isCurriculumComplete,
+        },
+        srs_review: {
+          items: srsReviewItems,
+          source:
+            activeLearningItems.length > 0 && dueSrsItems.length > 0
+              ? "srs_db"
+              : "syllabus_fallback",
+          active_learning_count: activeLearningItems.length,
+        },
+        syllabus_sync: {
+          suggested_count: parsed.metadata.newly_suggested_items?.length ?? 0,
+          pending_created_count: pendingSuggestions.length,
         },
         session_metadata: sessionMetadata,
         generated_at: new Date().toISOString(),
@@ -459,10 +527,19 @@ export async function generateMvpDailyTask(
     };
   } catch (error) {
     console.error("AI MVP task generation failed:", error);
-    const fallback = buildFallbackTask(topic, dayNumber, syllabusProgress);
-    const deterministicTopic = syllabusProgress.isCurriculumComplete
+    const fallback = buildFallbackTask(
+      topic,
+      dayNumber,
+      syllabusProgressForPrompt
+    );
+    const deterministicTopic = syllabusProgressForPrompt.isCurriculumComplete
       ? "Mastery Consolidation Day"
-      : syllabusProgress.nextTopic.title;
+      : syllabusProgressForPrompt.nextTopic.title;
+    const questStructure = buildQuestStructureMetadata(
+      fallback.instructions,
+      syllabusProgressForPrompt,
+      srsReviewItems
+    );
 
     return {
       task: fallback,
@@ -471,6 +548,7 @@ export async function generateMvpDailyTask(
         prompt_version: PROMPT_VERSION,
         topic: deterministicTopic,
         day_number: dayNumber,
+        quest_structure: questStructure,
         progress_context: syllabusInput,
         progress_source: isFreshStart ? "default_day_1" : "user_history",
         current_progress: {
@@ -482,17 +560,25 @@ export async function generateMvpDailyTask(
           action: "advance",
         },
         syllabus_progress: {
-          next_topic_id: syllabusProgress.nextTopic.id,
-          next_topic_title: syllabusProgress.nextTopic.title,
+          next_topic_id: syllabusProgressForPrompt.nextTopic.id,
+          next_topic_title: syllabusProgressForPrompt.nextTopic.title,
           textbook_reference: textbookReference ?? null,
-          review_items: syllabusProgress.reviewItems,
-          completed_unit_ids: syllabusProgress.completedUnitIds,
-          is_curriculum_complete: syllabusProgress.isCurriculumComplete,
+          review_items: reviewItems,
+          completed_unit_ids: syllabusProgressForPrompt.completedUnitIds,
+          is_curriculum_complete: syllabusProgressForPrompt.isCurriculumComplete,
+        },
+        srs_review: {
+          items: srsReviewItems,
+          source:
+            activeLearningItems.length > 0 && dueSrsItems.length > 0
+              ? "srs_db"
+              : "syllabus_fallback",
+          active_learning_count: activeLearningItems.length,
         },
         session_metadata: {
           topic: deterministicTopic,
           chapter: deterministicTopic,
-          nextTopicId: syllabusProgress.nextTopic.id,
+          nextTopicId: syllabusProgressForPrompt.nextTopic.id,
           next_recommended_action: "advance",
         },
         generated_at: new Date().toISOString(),

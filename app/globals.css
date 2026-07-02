@@ -131,6 +131,29 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+@keyframes start-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 77, 141, 0.45),
+      0 6px 0 0 #b8326a;
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(255, 77, 141, 0),
+      0 6px 0 0 #b8326a;
+  }
+}
+
+.animate-start-pulse {
+  animation: start-pulse 2s ease-in-out infinite;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 @keyframes breathe-glow {
   0%,
   100% {

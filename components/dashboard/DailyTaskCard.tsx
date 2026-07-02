@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, CheckCircle2, Clock } from "lucide-react";
 import { ParsedQuestSections } from "@/components/dashboard/TaskContent";
+import { SrsReviewList } from "@/components/dashboard/SrsReviewCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { SrsReviewItemMeta } from "@/lib/srs/types";
 import type { ParsedQuest } from "@/lib/tasks/parser";
 import { cn } from "@/lib/utils";
 import type { DailyTask } from "@/types/database";
@@ -41,6 +43,11 @@ interface DailyTaskCardProps {
   completeLabel?: string;
   completedLabel?: string;
   onComplete?: () => void;
+  srsReviewItems?: SrsReviewItemMeta[];
+  srsReviewDisabled?: boolean;
+  onSrsItemAnswered?: (itemId: string, isCorrect: boolean) => void;
+  /** When false, quest complete button stays locked (e.g. pending SRS feedback). */
+  canCompleteQuest?: boolean;
 }
 
 const CARD_VARIANTS = {
@@ -79,6 +86,10 @@ export function DailyTaskCard({
   completeLabel,
   completedLabel,
   onComplete,
+  srsReviewItems,
+  srsReviewDisabled = false,
+  onSrsItemAnswered,
+  canCompleteQuest = true,
 }: DailyTaskCardProps) {
   const display = task ?? MOCK_DAY_1;
   const resolvedQuest = quest ?? EMPTY_QUEST;
@@ -212,7 +223,21 @@ export function DailyTaskCard({
         </CardHeader>
 
         <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          {variant === "side" && srsReviewItems && srsReviewItems.length > 0 ? (
+            <SrsReviewList
+              items={srsReviewItems}
+              disabled={srsReviewDisabled || isCompleted}
+              onItemAnswered={onSrsItemAnswered}
+            />
+          ) : null}
+
           <ParsedQuestSections quest={resolvedQuest} />
+
+          {!canCompleteQuest && !isCompleted && srsReviewItems && srsReviewItems.length > 0 ? (
+            <p className="text-center text-xs text-city-orange">
+              Answer all SRS review cards to unlock this quest
+            </p>
+          ) : null}
 
           <div className="relative pt-2">
             {isCompleted ? (
@@ -234,6 +259,7 @@ export function DailyTaskCard({
               <motion.button
                 type="button"
                 onClick={handleComplete}
+                disabled={!canCompleteQuest}
                 animate={
                   buttonBounce
                     ? { scale: [1, 1.05, 0.98, 1] }
@@ -243,10 +269,10 @@ export function DailyTaskCard({
                 className={cn(
                   "flex h-14 w-full items-center justify-center gap-3 rounded-xl",
                   "border-2 text-base font-bold sm:text-lg",
-                  style.button,
+                  canCompleteQuest ? style.button : "cursor-not-allowed border-white/10 bg-city-navy/60 text-city-muted opacity-60 shadow-none",
                   "outline-none transition-colors duration-300",
-                  "hover:brightness-110",
-                  "active:translate-y-1 active:scale-[0.98]",
+                  canCompleteQuest && "hover:brightness-110",
+                  canCompleteQuest && "active:translate-y-1 active:scale-[0.98]",
                   "focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-offset-2 focus-visible:ring-offset-city-navy"
                 )}
               >

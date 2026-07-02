@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BookOpen,
   Gamepad2,
   LayoutDashboard,
   Settings,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/library", label: "Library", icon: BookOpen },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/tamagotchi", label: "Pet", icon: Gamepad2 },
   { href: "/settings", label: "Settings", icon: Settings },
